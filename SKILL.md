@@ -45,6 +45,8 @@ Zod is for **runtime type validation** — parsing untrusted data at system boun
 | 5 | Performance & Composition | MEDIUM | `perf-` |
 | 6 | v4 Migration | MEDIUM | `migrate-` |
 | 7 | Advanced Patterns | MEDIUM | `pattern-` |
+| 8 | Architecture & Boundaries | CRITICAL/HIGH | `arch-` |
+| 9 | Observability | HIGH/MEDIUM | `observe-` |
 
 ## Quick Reference
 
@@ -90,6 +92,17 @@ Zod is for **runtime type validation** — parsing untrusted data at system boun
 - `pattern-branded-types` — `.brand<"Name">()` for nominal typing (USD vs EUR)
 - `pattern-codecs` — `z.codec()` for bidirectional transforms (parse + serialize)
 - `pattern-pipe` — `.pipe()` for staged parsing (string → number → validate range)
+
+### 8. Architecture & Boundaries (CRITICAL/HIGH)
+
+- `arch-boundary-parsing` — Parse at system boundaries (API handler, env, form, fetch); pass typed data to domain logic
+- `arch-schema-organization` — Co-locate schemas with their boundary layer; domain types use `z.infer`
+- `arch-schema-versioning` — Additive changes only for non-breaking evolution; new fields use `.optional()`
+
+### 9. Observability (HIGH/MEDIUM)
+
+- `observe-structured-errors` — Use `z.flattenError()` for compact structured logs with request correlation IDs
+- `observe-error-metrics` — `trackedSafeParse()` wrapper to increment counters per schema and field on failure
 
 ## Schema Types Quick Reference
 
@@ -154,6 +167,8 @@ Each rule file contains:
 | 5 | `references/error-handling.md` | ZodError, flattenError, treeifyError, error customization |
 | 6 | `references/advanced-features.md` | Codecs, branded types, JSON Schema, registries |
 | 7 | `references/anti-patterns.md` | Common mistakes with BAD/GOOD examples |
+| 8 | `references/boundary-architecture.md` | Where Zod fits: Express, tRPC, Next.js, React Hook Form, env, external APIs |
+| 9 | `references/linter-and-ci.md` | ESLint rules, CI schema snapshots, unused schema detection, circular deps |
 
 ## Full Compiled Document
 
