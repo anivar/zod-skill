@@ -8,7 +8,7 @@ AI agents often generate outdated Zod v3 patterns — `z.string().email()` inste
 
 ## This Solution
 
-22 rules with incorrect→correct code examples that teach agents Zod v4's actual API behavior, schema design patterns, error handling, and TypeScript integration. Each rule targets a specific mistake and shows exactly how to fix it.
+27 rules with incorrect→correct code examples that teach agents Zod v4's actual API behavior, schema design patterns, error handling, architectural placement, observability, and TypeScript integration. Each rule targets a specific mistake and shows exactly how to fix it.
 
 ## Install
 
@@ -29,7 +29,7 @@ npx skills add https://github.com/anivar/zod-skill
 
 ## What's Inside
 
-### 22 Rules Across 7 Categories
+### 27 Rules Across 9 Categories
 
 | Priority | Category | Rules | Impact |
 |----------|----------|-------|--------|
@@ -40,6 +40,8 @@ npx skills add https://github.com/anivar/zod-skill
 | 5 | Performance & Composition | 3 | MEDIUM |
 | 6 | v4 Migration | 3 | MEDIUM |
 | 7 | Advanced Patterns | 3 | MEDIUM |
+| 8 | Architecture & Boundaries | 3 | CRITICAL/HIGH |
+| 9 | Observability | 2 | HIGH/MEDIUM |
 
 Each rule file contains:
 - Why it matters
@@ -47,7 +49,7 @@ Each rule file contains:
 - Correct code with explanation
 - Decision tables and additional context
 
-### 7 Deep-Dive References
+### 9 Deep-Dive References
 
 | Reference | Covers |
 |-----------|--------|
@@ -58,6 +60,8 @@ Each rule file contains:
 | `error-handling.md` | ZodError, flattenError, treeifyError, error customization, i18n |
 | `advanced-features.md` | Codecs, branded types, JSON Schema, registries, Standard Schema |
 | `anti-patterns.md` | 14 common mistakes with BAD/GOOD examples |
+| `boundary-architecture.md` | Where Zod fits: Express, tRPC, Next.js, React Hook Form, env, external APIs |
+| `linter-and-ci.md` | ESLint rules, CI schema snapshots, unused schema detection, circular deps |
 
 ## Structure
 
@@ -71,7 +75,9 @@ Each rule file contains:
 │   ├── error-*                       # Error handling (HIGH)
 │   ├── perf-*                        # Performance & composition (MEDIUM)
 │   ├── migrate-*                     # v4 migration (MEDIUM)
-│   └── pattern-*                     # Advanced patterns (MEDIUM)
+│   ├── pattern-*                     # Advanced patterns (MEDIUM)
+│   ├── arch-*                        # Architecture & boundaries (CRITICAL/HIGH)
+│   └── observe-*                     # Observability (HIGH/MEDIUM)
 └── references/                       # Deep-dive reference docs
     ├── schema-types.md
     ├── parsing-and-inference.md
@@ -79,12 +85,14 @@ Each rule file contains:
     ├── refinements-and-transforms.md
     ├── error-handling.md
     ├── advanced-features.md
-    └── anti-patterns.md
+    ├── anti-patterns.md
+    ├── boundary-architecture.md
+    └── linter-and-ci.md
 ```
 
 ## Related
 
-- [zod-testing](https://github.com/anivar/zod-testing) — Testing skill for Zod schemas with Jest/Vitest (`npx skills add anivar/zod-testing -g`)
+- [zod-testing](https://github.com/anivar/zod-testing) — Testing skill for Zod schemas with Jest/Vitest, including structural testing and drift detection (`npx skills add anivar/zod-testing -g`)
 
 ## License
 

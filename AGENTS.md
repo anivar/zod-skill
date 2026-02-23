@@ -8,7 +8,7 @@
 
 ## Abstract
 
-Zod is a TypeScript-first schema validation library for runtime type checking at system boundaries — API input, form data, environment variables, external services. Use `z.infer<typeof Schema>` for type extraction, `safeParse()` for validation, and composition methods (`.pick()`, `.omit()`, `.partial()`) to derive schema variants. Zod v4 introduces breaking changes to string formats, enums, error handling, and recursive types.
+Zod is a TypeScript-first schema validation library for runtime type checking at system boundaries — API input, form data, environment variables, external services. Use `z.infer<typeof Schema>` for type extraction, `safeParse()` for validation, and composition methods (`.pick()`, `.omit()`, `.partial()`) to derive schema variants. Zod v4 introduces breaking changes to string formats, enums, error handling, and recursive types. This guide also covers architectural placement (where to parse), schema organization, versioning strategy, and production observability.
 
 ---
 
@@ -21,6 +21,8 @@ Zod is a TypeScript-first schema validation library for runtime type checking at
 5. [Performance & Composition](#5-performance--composition) — MEDIUM
 6. [v4 Migration](#6-v4-migration) — MEDIUM
 7. [Advanced Patterns](#7-advanced-patterns) — MEDIUM
+8. [Architecture & Boundaries](#8-architecture--boundaries) — CRITICAL/HIGH
+9. [Observability](#9-observability) — HIGH/MEDIUM
 
 ---
 
@@ -478,6 +480,151 @@ const PortNumber = z
   .pipe(z.coerce.number())
   .pipe(z.int().min(1).max(65535))
 ```
+
+---
+
+## 8. Architecture & Boundaries
+**Impact: CRITICAL/HIGH**
+
+### Rule: Parse at System Boundaries, Not in Domain Logic
+
+Call `safeParse()` at entry points (API handlers, env startup, form resolvers, external fetches). Pass typed data inward. Domain logic receives typed values, never `unknown`.
+
+```typescript
+// INCORRECT — domain logic handles unknown input
+function calculateDiscount(data: unknown) {
+  const result = OrderSchema.safeParse(data)
+  if (!result.success) throw new Error("Invalid order")
+  return result.data.total > 100 ? result.data.total * 0.1 : 0
+}
+
+// CORRECT — parse at boundary, pass typed data inward
+app.post("/orders", (req, res) => {
+  const result = OrderSchema.safeParse(req.body)
+  if (!result.success) {
+    return res.status(400).json({
+      errors: z.flattenError(result.error).fieldErrors,
+    })
+  }
+  const discount = calculateDiscount(result.data) // typed Order
+  res.json({ total: result.data.total - discount })
+})
+
+function calculateDiscount(order: Order): number {
+  return order.total > 100 ? order.total * 0.1 : 0
+}
+```
+
+| Boundary | Where to parse |
+|----------|---------------|
+| Express/Fastify | Route handler or validation middleware |
+| tRPC | `.input(Schema)` — framework parses for you |
+| Next.js Server Action | Top of action function |
+| React Hook Form | `zodResolver(Schema)` |
+| Env vars | At app startup (`parse()` — crash on invalid is intentional) |
+| External API | After `fetch()`, before using data |
+
+### Rule: Co-locate Schemas with Their Boundary Layer
+
+Place schemas next to the boundary that uses them. Domain types use `z.infer`, never re-export raw schemas across layers.
+
+```typescript
+// INCORRECT — everything in one folder
+src/schemas/user.ts      // who uses this?
+src/schemas/order.ts
+src/schemas/config.ts
+
+// CORRECT — co-located with boundaries
+src/api/users/schemas.ts     // API request/response schemas
+src/features/profile/form-schema.ts  // form validation
+src/config/env.ts            // env parsing
+src/domain/types.ts          // z.infer types only
+```
+
+### Rule: Evolve Schemas Without Breaking Consumers
+
+Additive changes only for non-breaking evolution. New fields use `.optional()`. Never remove required fields without a major version bump.
+
+```typescript
+// INCORRECT — removing role breaks consumers silently
+const UserV2 = z.object({ name: z.string(), email: z.email() })
+// role is gone — consumers get undefined
+
+// CORRECT — keep role, add new field as optional
+const UserV2 = z.object({
+  name: z.string(),
+  email: z.email(),
+  role: z.enum(["admin", "user"]),       // kept
+  displayName: z.string().optional(),    // new, optional
+})
+```
+
+| Change | Breaking? |
+|--------|-----------|
+| Add optional field | No |
+| Add required field | **Yes** |
+| Remove field | **Yes** |
+| Tighten constraint | **Yes** |
+| Loosen constraint | No |
+| Add union member | No |
+| Remove union member | **Yes** |
+
+---
+
+## 9. Observability
+**Impact: HIGH/MEDIUM**
+
+### Rule: Log Structured Errors, Not Raw ZodError
+
+Use `z.flattenError()` for compact, structured logs with request correlation IDs. Never log raw ZodError objects.
+
+```typescript
+// INCORRECT — raw ZodError is noisy and unqueryable
+logger.error("Validation failed", { error: result.error })
+
+// CORRECT — structured, compact, queryable
+const flat = z.flattenError(result.error)
+logger.warn("validation_failed", {
+  requestId: req.id,
+  schema: "UserSchema",
+  path: req.path,
+  formErrors: flat.formErrors,
+  fieldErrors: flat.fieldErrors,
+})
+```
+
+### Rule: Track Validation Error Rates per Schema and Field
+
+Wrap `safeParse` in a tracked helper that increments counters per schema and per field on failure.
+
+```typescript
+function trackedSafeParse<T extends z.ZodType>(
+  schema: T,
+  data: unknown,
+  schemaName: string
+): z.SafeParseReturnType<z.input<T>, z.output<T>> {
+  const result = schema.safeParse(data)
+  metrics.increment("zod.validation.attempt", { schema: schemaName })
+  if (!result.success) {
+    metrics.increment("zod.validation.failure", { schema: schemaName })
+    const flat = z.flattenError(result.error)
+    for (const field of Object.keys(flat.fieldErrors)) {
+      metrics.increment("zod.validation.field_error", {
+        schema: schemaName,
+        field,
+      })
+    }
+  }
+  return result
+}
+```
+
+| Signal | Meaning |
+|--------|---------|
+| High failure rate | Schema may be too strict |
+| One field dominates failures | Confusing input format |
+| Schema never fails | Schema may be too loose |
+| Failure spike after deploy | Schema change broke clients |
 
 ---
 
