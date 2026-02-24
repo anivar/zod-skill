@@ -12,7 +12,8 @@ user-invocable: false
 agentic: false
 compatibility: "TypeScript ^5.5 projects using zod ^4.0.0"
 metadata:
-  author: anivar
+  author: Anivar Aravind
+  author_url: https://anivar.net
   version: 1.0.0
   tags: zod, validation, schema, typescript, parsing, type-inference, forms, api
 ---
