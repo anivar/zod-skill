@@ -1,5 +1,7 @@
 # Zod Skill
 
+Created by **[Anivar Aravind](https://anivar.net)**
+
 An AI agent skill for writing, validating, and debugging Zod v4 schemas with modern best practices.
 
 ## The Problem
@@ -90,9 +92,30 @@ Each rule file contains:
     └── linter-and-ci.md
 ```
 
-## Related
+## Ecosystem — Skills by [Anivar Aravind](https://anivar.net)
 
-- [zod-testing](https://github.com/anivar/zod-testing) — Testing skill for Zod schemas with Jest/Vitest, including structural testing and drift detection (`npx skills add anivar/zod-testing -g`)
+### Testing Skills
+| Skill | What it covers | Install |
+|-------|---------------|---------|
+| [jest-skill](https://github.com/anivar/jest-skill) | Jest best practices — mock design, async testing, matchers, timers, snapshots | `npx skills add anivar/jest-skill -g` |
+| [zod-testing](https://github.com/anivar/zod-testing) | Zod schema testing — safeParse, mock data, property-based | `npx skills add anivar/zod-testing -g` |
+| [msw-skill](https://github.com/anivar/msw-skill) | MSW 2.0 API mocking — handlers, responses, GraphQL | `npx skills add anivar/msw-skill -g` |
+| [redux-saga-testing](https://github.com/anivar/redux-saga-testing) | Redux-Saga testing — expectSaga, testSaga, providers | `npx skills add anivar/redux-saga-testing -g` |
+
+### Library & Framework Skills
+| Skill | What it covers | Install |
+|-------|---------------|---------|
+| [redux-saga-skill](https://github.com/anivar/redux-saga-skill) | Redux-Saga effects, fork model, channels, RTK | `npx skills add anivar/redux-saga-skill -g` |
+| [msw-skill](https://github.com/anivar/msw-skill) | MSW 2.0 handlers, responses, migration | `npx skills add anivar/msw-skill -g` |
+
+### Engineering Analysis
+| Skill | What it covers | Install |
+|-------|---------------|---------|
+| [contributor-codebase-analyzer](https://github.com/anivar/contributor-codebase-analyzer) | Code analysis, annual reviews, promotion readiness | `npx skills add anivar/contributor-codebase-analyzer -g` |
+
+## Author
+
+**[Anivar Aravind](https://anivar.net)** — Building AI agent skills for modern JavaScript/TypeScript development.
 
 ## License
 
