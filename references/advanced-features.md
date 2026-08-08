@@ -199,3 +199,49 @@ function validate(schema: StandardSchema, data: unknown) {
 // Works with Zod schemas
 validate(UserSchema, data)
 ```
+
+## Top-level codec functions
+
+`z.codec()` gives a schema `.decode()` and `.encode()`, but the standalone
+functions are often what you want when the codec is applied somewhere generic:
+
+```ts
+const DateField = z.codec(z.iso.datetime(), z.date(), {
+  decode: (s) => new Date(s),
+  encode: (d) => d.toISOString(),
+})
+
+z.decode(DateField, "2024-01-01T00:00:00Z")  // Date
+z.encode(DateField, new Date())              // string
+
+// Swap the direction without rewriting the codec.
+const Inverted = z.invertCodec(DateField)
+```
+
+`z.invertCodec()` matters when the same transform is needed in both directions
+at different boundaries — reading from an API and writing back to it — and
+saves defining the mirror image by hand, which is where the two drift apart.
+
+## String formats added after 4.0
+
+```ts
+z.guid()            // any GUID/UUID shape, looser than z.uuid()
+z.hash("sha256")    // also "sha1", "sha384", "sha512", "md5"
+```
+
+`z.hash()` validates the hex length for the named algorithm, so a truncated
+digest fails at the boundary rather than downstream.
+
+## Strict optional properties
+
+```ts
+// `.optional()` accepts an explicit `undefined`; `.exactOptional()` does not —
+// the key must be absent rather than present-and-undefined.
+z.object({ nickname: z.string().exactOptional() })
+
+// `.nonoptional()` removes optionality again, which is useful after a
+// `.partial()` when one field must come back.
+```
+
+The distinction matters against JSON, where `{"a": undefined}` cannot be
+expressed, and against `exactOptionalPropertyTypes` in TypeScript.
