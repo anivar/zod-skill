@@ -405,7 +405,7 @@ z.base64()
 ```typescript
 enum Role { Admin = "admin", User = "user" }
 
-// REMOVED — z.nativeEnum()
+// DEPRECATED — z.nativeEnum() still works, but z.enum() is the one to use
 z.nativeEnum(Role)
 
 // v4 — z.enum() accepts TS enums directly

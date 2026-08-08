@@ -1,7 +1,7 @@
 ---
 title: "v4: Unified z.enum()"
 impact: MEDIUM
-description: Use unified z.enum() which now accepts TypeScript enums directly. z.nativeEnum() is removed.
+description: Use unified z.enum() which now accepts TypeScript enums directly. z.nativeEnum() is deprecated.
 tags: migration, v4, enum, nativeEnum
 ---
 
@@ -9,12 +9,12 @@ tags: migration, v4, enum, nativeEnum
 
 ## Problem
 
-Zod v3 had separate `z.enum()` (string arrays) and `z.nativeEnum()` (TypeScript/JS enums). In v4, `z.enum()` handles both. `z.nativeEnum()` is removed.
+Zod v3 had separate `z.enum()` (string arrays) and `z.nativeEnum()` (TypeScript/JS enums). In v4, `z.enum()` handles both. `z.nativeEnum()` is deprecated.
 
 ## Incorrect
 
 ```typescript
-// BAD: z.nativeEnum() is removed in v4
+// BAD: z.nativeEnum() is deprecated in v4
 enum Role {
   Admin = "admin",
   User = "user",

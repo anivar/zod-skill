@@ -6,7 +6,7 @@ An AI agent skill for writing, validating, and debugging Zod v4 schemas with mod
 
 ## The Problem
 
-AI agents often generate outdated Zod v3 patterns — `z.string().email()` instead of `z.email()`, `z.nativeEnum()` instead of `z.enum()`, `required_error` instead of the `error` parameter — and miss critical parsing pitfalls like using `parse()` instead of `safeParse()`, forgetting `parseAsync` for async refinements, or assuming `z.object()` preserves unknown keys. These produce schemas that compile but silently misbehave at runtime.
+AI agents often generate outdated Zod v3 patterns — `z.string().email()` instead of `z.email()`, `z.nativeEnum()` instead of the unified `z.enum()`, `required_error` instead of the `error` parameter — and miss critical parsing pitfalls like using `parse()` instead of `safeParse()`, forgetting `parseAsync` for async refinements, or assuming `z.object()` preserves unknown keys. These produce schemas that compile but silently misbehave at runtime.
 
 ## This Solution
 
@@ -18,6 +18,9 @@ AI agents often generate outdated Zod v3 patterns — `z.string().email()` inste
 npx skills add anivar/zod-skill -g
 ```
 
+Testing schemas is covered too, merged from the former `zod-testing` skill —
+see `references/testing.md`.
+
 Or with full URL:
 
 ```bash
@@ -26,8 +29,14 @@ npx skills add https://github.com/anivar/zod-skill
 
 ## Baseline
 
-- zod ^4.0.0
+- zod ^4.3.0 (tracks 4.4.x; audited against zod.dev, August 2026)
 - TypeScript ^5.5
+
+The skill is checked against Zod's own documentation rather than its release
+notes, which matters more than it sounds: several APIs announced in 4.3
+releases — `slugify`, `.with()`, `.apply()`, `.overwrite()`, `.register()` —
+have no presence in the documentation, and a skill that taught them would be
+teaching an interface the project has not committed to.
 
 ## What's Inside
 
@@ -120,3 +129,12 @@ Each rule file contains:
 ## License
 
 MIT
+
+## If this is useful
+
+A star helps other people find it, and tells me which of these skills are worth
+keeping current as the upstream libraries move.
+
+[Sponsor the work](https://github.com/sponsors/anivar) if you would like more of
+it — these skills are maintained alongside open standards and small-model work
+at [OpenSLM](https://openslm.ai).

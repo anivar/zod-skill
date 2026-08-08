@@ -16,6 +16,7 @@
 - reportInput in production
 - z.lazy() for recursive schemas (v4)
 - Duplicating field definitions
+- Hand-rolling what Zod 4.1–4.4 now does natively
 
 ## Using parse() with try/catch instead of safeParse()
 
@@ -235,4 +236,76 @@ const UpdateUser = z.object({ name: z.string().optional(), email: z.email().opti
 const User = z.object({ name: z.string(), email: z.email() })
 const CreateUser = User
 const UpdateUser = User.partial()
+```
+
+## Hand-rolling what Zod 4.1–4.4 now does natively
+
+Not deprecations — working code that a newer API does better. An anti-pattern
+is not only a thing that breaks; it is also a thing you are maintaining that
+the library will now maintain for you.
+
+### One-way transforms where the value has to make a round trip
+
+```ts
+// WORKS, but you own the inverse
+const DateIn = z.iso.datetime().transform((s) => new Date(s))
+const toWire = (d: Date) => d.toISOString()   // and this drifts from the above
+
+// BETTER: one definition, both directions
+const DateField = z.codec(z.iso.datetime(), z.date(), {
+  decode: (s) => new Date(s),
+  encode: (d) => d.toISOString(),
+})
+z.decode(DateField, wire)     // Date
+z.encode(DateField, value)    // string
+z.invertCodec(DateField)      // when the boundary runs the other way
+```
+
+The transform pair is where serialisation bugs live: someone changes the parse
+side and the write side keeps the old shape. A codec makes that impossible to
+express.
+
+### Optional keys that must not be present-and-undefined
+
+```ts
+// WORKS, but accepts { nickname: undefined }
+z.object({ nickname: z.string().optional() })
+
+// BETTER when the key must be absent
+z.object({ nickname: z.string().exactOptional() })
+```
+
+Matters against JSON, which cannot express an explicit `undefined`, and against
+TypeScript's `exactOptionalPropertyTypes`.
+
+### Mutually exclusive unions checked by hand
+
+```ts
+// WORKS, but accepts an object satisfying both arms
+z.union([EmailLogin, PhoneLogin]).refine(onlyOneOf)
+
+// BETTER
+z.xor(EmailLogin, PhoneLogin)
+```
+
+### JSON Schema written or parsed by hand
+
+```ts
+// BETTER, both directions
+z.toJSONSchema(User)      // publish a contract
+z.fromJSONSchema(spec)    // consume someone else's
+```
+
+Hand-written JSON Schema alongside a Zod schema is two sources of truth that
+agree only until someone edits one of them.
+
+### Format checks written as regex
+
+```ts
+// WORKS
+z.string().regex(/^[0-9a-f]{64}$/i)
+
+// BETTER — named, and correct per algorithm
+z.hash("sha256")
+z.guid()
 ```
