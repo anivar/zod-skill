@@ -87,7 +87,7 @@ Zod is for **runtime type validation** — parsing untrusted data at system boun
 ### 6. v4 Migration (MEDIUM)
 
 - `migrate-string-formats` — Use `z.email()`, `z.uuid()`, `z.url()` not `z.string().email()`
-- `migrate-native-enum` — Use unified `z.enum()` for TS enums; `z.nativeEnum()` is removed
+- `migrate-native-enum` — Use unified `z.enum()` for TS enums; `z.nativeEnum()` is deprecated
 - `migrate-error-api` — Use `error` parameter everywhere; `message`, `errorMap` are removed
 
 ### 7. Advanced Patterns (MEDIUM)

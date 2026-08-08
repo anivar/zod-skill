@@ -58,12 +58,12 @@ To allow `parse()` in specific files (e.g., env config where crashing on invalid
 }
 ```
 
-### Ban `z.nativeEnum()` (Removed in v4)
+### Ban `z.nativeEnum()` (deprecated in v4)
 
 ```jsonc
 {
   "selector": "CallExpression[callee.property.name='nativeEnum']",
-  "message": "z.nativeEnum() is removed in Zod v4. Use z.enum(YourTSEnum) instead. See: rules/migrate-native-enum.md"
+  "message": "z.nativeEnum() is deprecated in Zod v4. Use z.enum(YourTSEnum) instead. See: rules/migrate-native-enum.md"
 }
 ```
 
@@ -93,7 +93,7 @@ To allow `parse()` in specific files (e.g., env config where crashing on invalid
       },
       {
         "selector": "CallExpression[callee.property.name='nativeEnum']",
-        "message": "z.nativeEnum() removed in v4. Use z.enum(). See: rules/migrate-native-enum.md"
+        "message": "z.nativeEnum() deprecated in v4. Use z.enum(). See: rules/migrate-native-enum.md"
       }
     ]
   },

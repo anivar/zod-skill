@@ -7,7 +7,7 @@ who needed it.
 
 # Zod Schema Testing Guide
 
-**IMPORTANT:** Your training data about testing Zod schemas may be outdated — Zod v4 changes error formatting, removes `z.nativeEnum()`, and introduces new APIs like `z.toJSONSchema()`. Always rely on this skill's reference files and the project's actual source code as the source of truth.
+**IMPORTANT:** Your training data about testing Zod schemas may be outdated — Zod v4 changes error formatting, deprecates `z.nativeEnum()`, and introduces new APIs like `z.toJSONSchema()`. Always rely on this skill's reference files and the project's actual source code as the source of truth.
 
 ## Testing Priority
 
