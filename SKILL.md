@@ -4,18 +4,20 @@ description: >
   Zod v4 best practices, patterns, and API guidance for schema validation,
   parsing, error handling, and type inference in TypeScript applications.
   Covers safeParse, object composition, refinements, transforms, codecs,
-  branded types, and v3→v4 migration. Baseline: zod ^4.0.0.
+  branded types, v3→v4 migration, and testing schemas with Jest or Vitest.
+  Baseline: zod ^4.3.0.
   Triggers on: zod imports, z.object, z.string, z.infer, safeParse,
-  mentions of "zod", "schema validation", "zod v4", or "z.enum".
+  mentions of "zod", "schema validation", "zod v4", "z.enum", or testing a
+  schema — "schema test", "zod mock", zod-schema-faker.
 license: MIT
 user-invocable: false
 agentic: false
-compatibility: "TypeScript ^5.5 projects using zod ^4.0.0"
+compatibility: "TypeScript ^5.5 projects using zod ^4.3.0 or later"
 metadata:
   author: Anivar Aravind
   author_url: https://anivar.net
-  version: 1.0.0
-  tags: zod, validation, schema, typescript, parsing, type-inference, forms, api
+  version: 1.1.0
+  tags: zod, validation, schema, typescript, parsing, type-inference, forms, api, testing, jest, vitest
 ---
 
 # Zod
@@ -170,6 +172,9 @@ Each rule file contains:
 | 7 | `references/anti-patterns.md` | Common mistakes with BAD/GOOD examples |
 | 8 | `references/boundary-architecture.md` | Where Zod fits: Express, tRPC, Next.js, React Hook Form, env, external APIs |
 | 9 | `references/linter-and-ci.md` | ESLint rules, CI schema snapshots, unused schema detection, circular deps |
+| 10 | `references/testing.md` | Testing schemas: safeParse in tests, boundary values, error assertions, mock data, property-based testing |
+| 11 | `references/testing-api.md` | Jest and Vitest API reference for schema tests |
+| 12 | `references/testing-anti-patterns.md` | Testing mistakes with BAD/GOOD examples |
 
 ## Full Compiled Document
 
