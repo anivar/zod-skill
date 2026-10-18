@@ -29,7 +29,7 @@ npx skills add https://github.com/anivar/zod-skill
 
 ## Baseline
 
-- zod ^4.3.0 (tracks 4.4.x; audited against zod.dev, August 2026)
+- zod ^4.6.0 (tracks 4.6.x; audited against zod.dev, October 2026)
 - TypeScript ^5.5
 
 The skill is checked against Zod's own documentation rather than its release

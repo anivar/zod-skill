@@ -2,7 +2,7 @@
 
 > This document is for AI agents and LLMs to follow when writing, reviewing, or debugging Zod schemas. It compiles all rules and references into a single executable guide.
 
-**Baseline:** zod ^4.0.0 with TypeScript ^5.5
+**Baseline:** zod ^4.6.0 with TypeScript ^5.5 (audited against zod 4.6.7)
 
 ---
 
@@ -651,3 +651,14 @@ function trackedSafeParse<T extends z.ZodType>(
 ## License
 
 MIT
+
+## Zod 4.6 Additions
+
+- **`.validate()`** — boolean-only validation without a result object or `ZodError`. Short-circuits on the first issue and returns a type guard; up to 35x faster than `.safeParse().success` on invalid input when compiled with `z.compile()`. Use it when you only need a yes/no, `.safeParse()` when you need values or issues. `validateAsync()` for async refinements.
+- **`z.properties()`** — validates chosen properties in place, preserving class instances and prototypes (unlike `z.object()`, which returns a plain object). Available as `z.instanceof(C).properties({...})` and the `ZodInstanceOf.properties()` method; Zod Mini exposes it as a check.
+- **`z.withParser()`** — installs a parser generated at build time, for CSP-strict environments where `new Function` is blocked (used by `z.compile()`).
+- **`z.iban()`** — electronic-format IBAN with ISO 7064 MOD 97-10 checksum.
+- **`fromJSONSchema()`** — new keywords: `minProperties`/`maxProperties`, `uniqueItems`, `contains`/`minContains`/`maxContains`.
+- **Lazy error maps** — global, locale, and per-schema `error` maps now evaluate on first read of `result.error`, not at parse time. Config swapped between parse and read applies the newer value; `.parse()` (throwing) is unaffected.
+- **`z.emoji()`** — now requires at least one pictograph; component-only strings no longer pass.
+- **Also**: `@zod/mini` is a standalone package versioned in lockstep with `zod`; ~3x faster `z.validate()` under CommonJS `require()`; a recursive-schema memory-retention regression is fixed.
