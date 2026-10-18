@@ -5,18 +5,18 @@ description: >
   parsing, error handling, and type inference in TypeScript applications.
   Covers safeParse, object composition, refinements, transforms, codecs,
   branded types, v3→v4 migration, and testing schemas with Jest or Vitest.
-  Baseline: zod ^4.3.0.
+  Baseline: zod ^4.6.0.
   Triggers on: zod imports, z.object, z.string, z.infer, safeParse,
   mentions of "zod", "schema validation", "zod v4", "z.enum", or testing a
   schema — "schema test", "zod mock", zod-schema-faker.
 license: MIT
 user-invocable: false
 agentic: false
-compatibility: "TypeScript ^5.5 projects using zod ^4.3.0 or later"
+compatibility: "TypeScript ^5.5 projects using zod ^4.6.0 or later (audited against zod 4.6.7)"
 metadata:
   author: Anivar Aravind
   author_url: https://anivar.net
-  version: 1.1.0
+  version: 1.2.0
   tags: zod, validation, schema, typescript, parsing, type-inference, forms, api, testing, jest, vitest
 ---
 
@@ -175,6 +175,55 @@ Each rule file contains:
 | 10 | `references/testing.md` | Testing schemas: safeParse in tests, boundary values, error assertions, mock data, property-based testing |
 | 11 | `references/testing-api.md` | Jest and Vitest API reference for schema tests |
 | 12 | `references/testing-anti-patterns.md` | Testing mistakes with BAD/GOOD examples |
+
+## Zod 4.6 Highlights
+
+New in Zod 4.6 (latest: 4.6.7). Full details in the official release notes.
+
+### `.validate()` — cheap boolean validation
+
+`.validate()` answers "is this input valid?" without building a result or a `ZodError`. It short-circuits on the first issue and returns a type guard on the schema's input type. Up to 35x faster than `.safeParse().success` on invalid input when the schema is compiled with `z.compile()` (5.9x uncompiled).
+
+```typescript
+const Player = z.object({ username: z.string(), xp: z.number() })
+
+if (Player.validate(data)) {
+  data.username // narrowed: string
+}
+```
+
+Use `.safeParse()` when you need the parsed value or the issues; use `.validate()` when you only need a yes/no. `validateAsync()` covers async refinements.
+
+### `z.properties()` — validate properties in place
+
+Unlike `z.object()`, `.properties()` validates specific properties of an object **in place**, preserving class instances and prototypes instead of returning a plain object.
+
+```typescript
+const okResponse = z.instanceof(Response).properties({
+  ok: z.literal(true),
+  status: z.number().min(200).max(299),
+})
+
+const res = await fetch('/api/user')
+okResponse.parse(res) === res // true: still a Response, methods intact
+```
+
+`ZodInstanceOf.properties()` is the method form; Zod Mini has `z.properties()` as a check.
+
+### `z.withParser()` — install a parser built elsewhere
+
+`z.compile()` builds parsers with `new Function`, which a strict Content Security Policy blocks. `z.withParser()` installs a parser generated at build time (or by a native compiler) under the same contract, for CSP-restricted environments.
+
+### `z.iban()` and expanded `fromJSONSchema()`
+
+`z.iban()` validates an electronic-format IBAN including the ISO 7064 MOD 97-10 checksum. `fromJSONSchema()` now also supports `minProperties`/`maxProperties`, `uniqueItems`, and `contains`/`minContains`/`maxContains`.
+
+### Two behavioral gotchas
+
+- **Error maps run lazily.** Global, locale, and per-schema `error` maps now run on the first read of `result.error`, not at parse time. Code that swaps `z.config()` between the parse and the read gets the newer configuration. Throwing parses (`.parse()`) are unaffected.
+- **`z.emoji()` requires a pictograph.** Component-only strings (a lone zero-width joiner, variation selector, skin tone modifier, digits) no longer pass.
+
+Also in 4.6: `@zod/mini` ships as a standalone package versioned in lockstep with `zod`, CommonJS `require()` of `z.validate()` is ~3x faster, and a memory-retention regression in recursive schemas is fixed.
 
 ## Full Compiled Document
 
