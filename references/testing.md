@@ -179,11 +179,18 @@ it("shows custom error for missing field", () => {
 
 ### Using zod-schema-faker
 
+Import from `zod-schema-faker/v4`. The package root is the library's Zod 3 entry and throws `Unsupported schema type` on a Zod 4 schema. `fake()` returns the schema's input type; parse the value to get the output of a schema with a transform.
+
+```bash
+npm install -D zod-schema-faker @faker-js/faker randexp
+```
+
 ```typescript
-import { install, fake } from "zod-schema-faker"
+import { faker } from "@faker-js/faker"
+import { fake, setFaker } from "zod-schema-faker/v4"
 import { z } from "zod"
 
-install(z) // call once in test setup
+setFaker(faker) // call once in test setup (beforeAll or setupFiles)
 
 const UserSchema = z.object({
   name: z.string().min(1),
@@ -200,7 +207,7 @@ it("schema accepts generated data", () => {
 ### Seeding for Deterministic Tests
 
 ```typescript
-import { seed, fake } from "zod-schema-faker"
+import { seed, fake } from "zod-schema-faker/v4"
 
 beforeEach(() => {
   seed(12345) // deterministic output
@@ -254,20 +261,88 @@ it("form shows validation errors", () => {
 
 ## Property-Based Testing
 
+A property states a rule that holds for every input. fast-check generates the inputs, reports the seed of a failure, and shrinks a failing input to the smallest case. Build the inputs with fast-check arbitraries so a failure shrinks, and state the rule as a relation between results, not by repeating the schema's logic (rule 10).
+
 ```typescript
 import fc from "fast-check"
-import { fake } from "zod-schema-faker"
 
-it("schema always accepts its own generated data", () => {
+const LineSchema = z.object({
+  priceMinor: z.number().int().min(0),
+  qty: z.number().int().min(1),
+})
+
+const OrderSchema = z
+  .object({ lines: z.array(LineSchema).min(1) })
+  .transform((order) => ({
+    ...order,
+    totalMinor: order.lines.reduce((sum, l) => sum + l.priceMinor * l.qty, 0),
+  }))
+
+const lineArb = fc.record({
+  priceMinor: fc.integer({ min: 0, max: 100_000 }),
+  qty: fc.integer({ min: 1, max: 20 }),
+})
+const linesArb = fc.array(lineArb, { minLength: 1, maxLength: 30 })
+
+const totalOf = (lines: z.input<typeof LineSchema>[]) => {
+  const result = OrderSchema.safeParse({ lines })
+  expect(result.success).toBe(true)
+  return result.data!.totalMinor
+}
+
+it("one unit costs its price", () => {
   fc.assert(
-    fc.property(fc.constant(null), () => {
-      const data = fake(UserSchema)
-      expect(UserSchema.safeParse(data).success).toBe(true)
+    fc.property(fc.integer({ min: 0, max: 100_000 }), (priceMinor) => {
+      expect(totalOf([{ priceMinor, qty: 1 }])).toBe(priceMinor)
     }),
-    { numRuns: 100 }
+  )
+})
+
+it("a line of quantity n costs the same as n lines of quantity 1", () => {
+  fc.assert(
+    fc.property(lineArb, (line) => {
+      const units = Array.from({ length: line.qty }, () => ({ priceMinor: line.priceMinor, qty: 1 }))
+      expect(totalOf([line])).toBe(totalOf(units))
+    }),
+  )
+})
+
+it("the total of two sets of lines is the sum of their totals", () => {
+  fc.assert(
+    fc.property(linesArb, linesArb, (a, b) => {
+      expect(totalOf([...a, ...b])).toBe(totalOf(a) + totalOf(b))
+    }),
+  )
+})
+
+it("any integer age outside 0..150 is rejected", () => {
+  fc.assert(
+    fc.property(fc.oneof(fc.integer({ max: -1 }), fc.integer({ min: 151 })), (age) => {
+      expect(UserSchema.safeParse({ name: "a", email: "a@example.com", age }).success).toBe(false)
+    }),
   )
 })
 ```
+
+To check that a schema accepts its own generated data, let fast-check choose the faker's seed. A failure then
+reports a seed that reproduces the data; it does not shrink.
+
+```typescript
+import { fake, seed } from "zod-schema-faker/v4"
+
+it("schema accepts its own generated data", () => {
+  fc.assert(
+    fc.property(fc.integer({ min: 0, max: 2 ** 31 - 1 }), (s) => {
+      seed(s)
+      expect(UserSchema.safeParse(fake(UserSchema)).success).toBe(true)
+    }),
+    { numRuns: 200 },
+  )
+})
+```
+
+Never write `fc.property(fc.constant(null), ...)`: it generates nothing, its counterexample is `[null]`, and the
+data that failed is lost.
 
 ## Rules
 
@@ -278,7 +353,7 @@ it("schema always accepts its own generated data", () => {
 5. **Assert specific error fields** — use `z.flattenError()` to check which field failed
 6. **Don't test schema internals** — test parse results, not `.shape` or `._def`
 7. **Use `z.toJSONSchema()` snapshots** — catch unintended schema changes
-8. **Seed random generators** — non-deterministic tests are flaky tests
+8. **Seed random generators** — take randomness from fast-check, or from a seed fast-check chooses, so a failure replays; non-deterministic tests are flaky tests
 9. **Test transforms separately** — verify input validation AND output conversion
 10. **Don't duplicate schema logic in assertions** — test behavior, not implementation
 
@@ -291,6 +366,7 @@ See [references/testing-anti-patterns.md](references/testing-anti-patterns.md) f
 - Using `parse()` in tests (crashes instead of failing)
 - Not testing boundary values
 - Hardcoding mock data instead of generating
+- A property over a constant (`fc.constant(null)`), which generates nothing
 - Snapshot testing raw ZodError instead of formatted output
 - Not testing at boundaries (schema tests pass but handler doesn't validate)
 - No snapshot regression testing (field removal goes unnoticed)

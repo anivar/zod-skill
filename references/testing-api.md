@@ -184,16 +184,19 @@ it("reports all validation errors at once", () => {
 
 ### Using zod-schema-faker
 
+Import from `zod-schema-faker/v4`. The package root is the library's Zod 3 entry and throws `Unsupported schema type` on a Zod 4 schema. `fake()` returns the schema's input type; parse the value to get the output of a schema with a transform.
+
 ```bash
-npm install -D zod-schema-faker
+npm install -D zod-schema-faker @faker-js/faker randexp
 ```
 
 ```typescript
-import { install, fake, seed } from "zod-schema-faker"
+import { faker } from "@faker-js/faker"
+import { fake, seed, setFaker } from "zod-schema-faker/v4"
 import { z } from "zod"
 
 // Call once in test setup (beforeAll or setupFiles)
-install(z)
+setFaker(faker)
 
 const UserSchema = z.object({
   name: z.string().min(1).max(50),
@@ -219,26 +222,10 @@ describe("with generated data", () => {
 })
 ```
 
-### Using @anatine/zod-mock
+### Not @anatine/zod-mock
 
-```bash
-npm install -D @anatine/zod-mock @faker-js/faker
-```
-
-```typescript
-import { generateMock } from "@anatine/zod-mock"
-
-it("generates valid mock", () => {
-  const mock = generateMock(UserSchema)
-  expect(UserSchema.safeParse(mock).success).toBe(true)
-})
-
-// With seed for deterministic output
-it("generates consistent mock", () => {
-  const mock = generateMock(UserSchema, { seed: 123 })
-  expect(mock.name).toBeDefined()
-})
-```
+`@anatine/zod-mock` supports Zod 3 only: its latest release (3.14.0) declares `zod ^3.21.4`, and on a Zod 4
+schema `generateMock()` returns `undefined`. Use `zod-schema-faker/v4`.
 
 ## Snapshot Testing
 
@@ -335,36 +322,99 @@ it("validates before insert", async () => {
 npm install -D fast-check
 ```
 
+A property states a rule that holds for every input. fast-check generates the inputs, reports the seed of a failure, and shrinks a failing input to the smallest case. Build the inputs with fast-check arbitraries so a failure shrinks, and state the rule as a relation between results, not by repeating the schema's logic (rule 10).
+
 ```typescript
 import fc from "fast-check"
-import { fake, seed } from "zod-schema-faker"
 
-it("schema always accepts its own generated data", () => {
+const LineSchema = z.object({
+  priceMinor: z.number().int().min(0),
+  qty: z.number().int().min(1),
+})
+
+const OrderSchema = z
+  .object({ lines: z.array(LineSchema).min(1) })
+  .transform((order) => ({
+    ...order,
+    totalMinor: order.lines.reduce((sum, l) => sum + l.priceMinor * l.qty, 0),
+  }))
+
+const lineArb = fc.record({
+  priceMinor: fc.integer({ min: 0, max: 100_000 }),
+  qty: fc.integer({ min: 1, max: 20 }),
+})
+const linesArb = fc.array(lineArb, { minLength: 1, maxLength: 30 })
+
+const totalOf = (lines: z.input<typeof LineSchema>[]) => {
+  const result = OrderSchema.safeParse({ lines })
+  expect(result.success).toBe(true)
+  return result.data!.totalMinor
+}
+
+it("one unit costs its price", () => {
   fc.assert(
-    fc.property(fc.integer({ min: 0, max: 10000 }), (s) => {
-      seed(s)
-      const data = fake(UserSchema)
-      return UserSchema.safeParse(data).success
+    fc.property(fc.integer({ min: 0, max: 100_000 }), (priceMinor) => {
+      expect(totalOf([{ priceMinor, qty: 1 }])).toBe(priceMinor)
     }),
-    { numRuns: 200 }
+  )
+})
+
+it("a line of quantity n costs the same as n lines of quantity 1", () => {
+  fc.assert(
+    fc.property(lineArb, (line) => {
+      const units = Array.from({ length: line.qty }, () => ({ priceMinor: line.priceMinor, qty: 1 }))
+      expect(totalOf([line])).toBe(totalOf(units))
+    }),
+  )
+})
+
+it("the total of two sets of lines is the sum of their totals", () => {
+  fc.assert(
+    fc.property(linesArb, linesArb, (a, b) => {
+      expect(totalOf([...a, ...b])).toBe(totalOf(a) + totalOf(b))
+    }),
+  )
+})
+
+it("any integer age outside 0..150 is rejected", () => {
+  fc.assert(
+    fc.property(fc.oneof(fc.integer({ max: -1 }), fc.integer({ min: 151 })), (age) => {
+      expect(UserSchema.safeParse({ name: "a", email: "a@example.com", age }).success).toBe(false)
+    }),
   )
 })
 ```
 
-### Transform Round-Trip Testing
+To check that a schema accepts its own generated data, let fast-check choose the faker's seed. A failure then
+reports a seed that reproduces the data; it does not shrink.
 
 ```typescript
-it("transform preserves data integrity", () => {
+import { fake, seed } from "zod-schema-faker/v4"
+
+it("schema accepts its own generated data", () => {
   fc.assert(
-    fc.property(fc.integer({ min: 0, max: 10000 }), (s) => {
+    fc.property(fc.integer({ min: 0, max: 2 ** 31 - 1 }), (s) => {
       seed(s)
-      const input = fake(InputSchema)
-      const result = InputSchema.safeParse(input)
-      if (result.success) {
-        // Verify output type matches expected shape
-        expect(OutputSchema.safeParse(result.data).success).toBe(true)
-      }
-      return true
+      expect(UserSchema.safeParse(fake(UserSchema)).success).toBe(true)
+    }),
+    { numRuns: 200 },
+  )
+})
+```
+
+Never write `fc.property(fc.constant(null), ...)`: it generates nothing, its counterexample is `[null]`, and the
+data that failed is lost.
+
+### Transform Output Testing
+
+```typescript
+it("transform output satisfies the output schema", () => {
+  fc.assert(
+    fc.property(fc.integer({ min: 0, max: 2 ** 31 - 1 }), (s) => {
+      seed(s)
+      const result = InputSchema.safeParse(fake(InputSchema))
+      expect(result.success).toBe(true) // a generated input that does not parse fails the test
+      expect(OutputSchema.safeParse(result.data).success).toBe(true)
     }),
   )
 })

@@ -12,6 +12,7 @@
 - Not testing optional/nullable combinations
 - Snapshot testing raw ZodError
 - Not seeding random data generators
+- A property over a constant
 - Not testing at boundaries
 - No snapshot regression testing
 - Testing schema shape but not error observability
@@ -148,9 +149,10 @@ it("accepts mock user", () => {
 })
 
 // GOOD: generate from schema — always in sync
-import { fake, seed, install } from "zod-schema-faker"
+import { faker } from "@faker-js/faker"
+import { fake, seed, setFaker } from "zod-schema-faker/v4"
 
-beforeAll(() => install(z))
+beforeAll(() => setFaker(faker))
 beforeEach(() => seed(42))
 
 it("accepts generated user", () => {
@@ -286,6 +288,30 @@ beforeEach(() => seed(42))
 it("accepts generated data", () => {
   const user = fake(UserSchema) // same every run
   expect(UserSchema.safeParse(user).success).toBe(true)
+})
+```
+
+## A property over a constant
+
+```typescript
+// BAD: fc.constant(null) generates nothing. The counterexample is [null], and
+// fast-check's seed does not reach the faker, so the data that failed is lost
+it("schema accepts generated data", () => {
+  fc.assert(
+    fc.property(fc.constant(null), () => {
+      expect(UserSchema.safeParse(fake(UserSchema)).success).toBe(true)
+    }),
+  )
+})
+
+// GOOD: fast-check chooses the faker's seed, so the counterexample reproduces the data
+it("schema accepts generated data", () => {
+  fc.assert(
+    fc.property(fc.integer({ min: 0, max: 2 ** 31 - 1 }), (s) => {
+      seed(s)
+      expect(UserSchema.safeParse(fake(UserSchema)).success).toBe(true)
+    }),
+  )
 })
 ```
 
