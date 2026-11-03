@@ -1,8 +1,10 @@
 # Refinements and Transforms Reference
 
+Docs: zod.dev/api · Zod 4.6.7
+
 ## .refine(fn, opts)
 
-Custom validation that returns a boolean.
+Custom validation that returns a boolean. The function receives the value only.
 
 ```typescript
 const EvenNumber = z.number().refine((n) => n % 2 === 0, {
@@ -16,29 +18,22 @@ const UniqueEmail = z.email().refine(
 )
 ```
 
+Options: `error`, `path` (where the issue goes), `abort` (stop after this check fails), `when` (run only when a condition holds; see `refine-cross-field`).
+
 ## .superRefine((val, ctx) => void)
 
-Advanced validation with multiple issues and path targeting.
+Validation that adds several issues, each with its own path. The `zod` package page lists it as deprecated in favour of `.check()`; the API page documents it and the 4.6.7 types do not mark it deprecated.
 
 ```typescript
 const Password = z.string().superRefine((val, ctx) => {
   if (val.length < 8) {
-    ctx.addIssue({
-      code: "custom",
-      message: "Must be at least 8 characters",
-    })
+    ctx.addIssue({ code: "custom", message: "Must be at least 8 characters", input: val })
   }
   if (!/[A-Z]/.test(val)) {
-    ctx.addIssue({
-      code: "custom",
-      message: "Must contain uppercase letter",
-    })
+    ctx.addIssue({ code: "custom", message: "Must contain uppercase letter", input: val })
   }
   if (!/[0-9]/.test(val)) {
-    ctx.addIssue({
-      code: "custom",
-      message: "Must contain a number",
-    })
+    ctx.addIssue({ code: "custom", message: "Must contain a number", input: val })
   }
 })
 ```
@@ -57,6 +52,7 @@ const Form = z
         code: "custom",
         path: ["confirm"], // targets the confirm field
         message: "Passwords don't match",
+        input: data.confirm,
       })
     }
   })
@@ -64,33 +60,36 @@ const Form = z
 
 ## .check(...checks)
 
-Functional-style checks (also available in full Zod, required in Zod Mini).
+Takes check functions such as `z.minLength()`, or a function that receives `ctx` and pushes issues onto `ctx.issues`. It works in Zod and is the only way to add checks in Zod Mini.
 
 ```typescript
-// Full Zod
 z.string().check(
   z.minLength(8, "Too short"),
   z.maxLength(100, "Too long"),
 )
 
-// Zod Mini
-import { z } from "zod/v4/mini"
-z.string().check(z.minLength(8), z.maxLength(100))
+z.string().check((ctx) => {
+  if (!ctx.value.includes("@")) {
+    ctx.issues.push({ code: "custom", message: "Missing @", input: ctx.value })
+  }
+})
 ```
+
+In Zod Mini (`import * as z from "zod/mini"`) the same calls work: `z.string().check(z.minLength(8), z.maxLength(100))`.
 
 ## .transform(fn)
 
 Converts the value to a new type (one-way).
 
 ```typescript
-const StringToNumber = z.string().transform((s) => parseInt(s, 10))
+const StringToNumber = z.string().regex(z.regexes.integer).transform(Number)
 // Input: string, Output: number
 
 const Trimmed = z.string().transform((s) => s.trim())
 // Input: string, Output: string (trimmed)
 ```
 
-Never throw inside transforms — use `.refine()` first for validation.
+Never throw inside a transform: Zod does not catch the error. To fail, push onto `ctx.issues` and return `z.NEVER` (see `refine-never-throw`). A transform is one-way: `.encode()` on a schema that contains one throws `$ZodEncodeError`. For two-way conversions, use `z.codec()`.
 
 ## .pipe(schema)
 
@@ -107,34 +106,40 @@ const PortNumber = z
 // Stage 3: validate integer in range
 ```
 
-## .preprocess(fn, schema)
+## z.preprocess(fn, schema)
 
-Transform input before parsing. Legacy — prefer `.pipe()`.
+Runs a function on the raw input, then parses the result with `schema`. A top-level function, not a method. Its input type is `unknown` unless you annotate the function's parameter.
 
 ```typescript
 const TrimmedString = z.preprocess(
   (val) => (typeof val === "string" ? val.trim() : val),
   z.string().min(1)
 )
+
+// annotate the parameter to set the input type, e.g. for react-hook-form
+const Trimmed = z.preprocess((val: string | null | undefined) => val?.trim() ?? "", z.string())
+type TrimmedInput = z.input<typeof Trimmed> // string | null | undefined
 ```
 
 ## .overwrite(fn)
 
-Modify value in place without changing type.
+Changes the value without changing its type, and returns the same schema class, so other methods stay available. `.trim()`, `.toLowerCase()` and `.toUpperCase()` are built on it.
 
 ```typescript
 const NormalizedEmail = z.email().overwrite((email) => email.toLowerCase())
-// Input: string, Output: string (lowercased)
+NormalizedEmail.parse("A@B.CO") // "a@b.co"
 ```
 
 ## .default(value)
 
-Provides default for undefined input. Applied after validation.
+When the input is `undefined`, returns the default and skips parsing. The default is not validated, and must match the output type.
 
 ```typescript
 const Port = z.number().default(3000)
 Port.parse(undefined) // 3000
 Port.parse(8080)      // 8080
+
+z.string().min(5).default("ab").parse(undefined) // "ab": min(5) does not run
 ```
 
 Input type becomes optional:
@@ -145,16 +150,19 @@ type Output = z.infer<typeof Port>  // number
 
 ## .prefault(value)
 
-Provides default before validation.
+When the input is `undefined`, parses the prefault value instead. It must match the input type, and it goes through every check and transform.
 
 ```typescript
 const Name = z.string().min(1).prefault("Anonymous")
-Name.parse(undefined) // "Anonymous" (validated against min(1) first)
+Name.parse(undefined) // "Anonymous" (validated against min(1))
+
+const Length = z.string().transform((s) => s.length).prefault("tuna")
+Length.parse(undefined) // 4
 ```
 
 ## .catch(value)
 
-Fallback on any error — never fails.
+Returns a fallback value when parsing fails. Pass a function to compute it; the function receives `ctx.error`.
 
 ```typescript
 const SafeNumber = z.number().catch(0)
@@ -162,19 +170,21 @@ SafeNumber.parse("not a number") // 0
 SafeNumber.parse(42)             // 42
 ```
 
-## .apply(fn)
+## .apply(fn, ...args)
 
-Apply a function that returns a schema.
+Calls a function with the schema and returns its result, so a shared helper fits in a method chain. Extra arguments go to the function.
 
 ```typescript
-const Clamped = z.number().apply((schema) =>
-  schema.min(0).max(100)
-)
+function percentage<T extends z.ZodNumber>(schema: T) {
+  return schema.min(0).max(100)
+}
+
+const Score = z.number().apply(percentage).nullable()
 ```
 
 ## Async Refinements and Transforms
 
-When any refinement or transform is async, you must use `parseAsync()` or `safeParseAsync()`.
+When any refinement or transform is async, you must use `parseAsync()` or `safeParseAsync()`. The sync methods throw `$ZodAsyncError`.
 
 ```typescript
 const Schema = z.object({
@@ -182,24 +192,30 @@ const Schema = z.object({
     async (email) => !(await db.exists(email)),
     { error: "Taken" }
   ),
-  avatar: z.url().transform(
-    async (url) => await downloadImage(url)
-  ),
+  avatar: z.url().transform(async (url) => {
+    const res = await fetch(url)
+    return res.blob()
+  }),
 })
 
 // REQUIRED: async parse
 const result = await Schema.safeParseAsync(data)
 ```
 
-## Issue Codes for ctx.addIssue()
+## Issue Codes
 
-| Code | Use When |
-|------|----------|
-| `"custom"` | Custom validation logic |
-| `"invalid_type"` | Wrong input type |
-| `"too_small"` | Below minimum (length, value, size) |
-| `"too_big"` | Above maximum |
-| `"invalid_string"` | String format validation |
-| `"invalid_enum_value"` | Value not in enum |
-| `"unrecognized_keys"` | Unknown keys in strict object |
-| `"invalid_union"` | No union branch matched |
+The codes Zod 4 reports. Use `"custom"` in `ctx.addIssue()` and `ctx.issues.push()`.
+
+| Code | Raised when |
+|------|-------------|
+| `"custom"` | A refinement or custom check fails |
+| `"invalid_type"` | Wrong input type, including an invalid `Date` and a missing required key |
+| `"too_small"` / `"too_big"` | Below a minimum or above a maximum (length, value, size) |
+| `"invalid_format"` | A string format or pattern fails (`format` names it: `"email"`, `"regex"`, ...) |
+| `"not_multiple_of"` | `.multipleOf()` fails |
+| `"unrecognized_keys"` | Unknown keys in a strict object |
+| `"invalid_union"` | No union branch matched; `errors` holds each branch's issues |
+| `"invalid_key"` / `"invalid_element"` | Wraps the issues of a failing record or map key, or map or set element, in `issues`. On 4.6.7 a record key that fails its pattern gives `invalid_key`; map keys and set elements report the inner code |
+| `"invalid_value"` | Not one of the allowed literal or enum values |
+
+Zod 3's `invalid_string`, `invalid_enum_value`, `invalid_literal`, `invalid_date`, `invalid_arguments` and `invalid_return_type` are gone (zod.dev/v4/changelog).

@@ -13,11 +13,11 @@ Dumping all schemas into a single `schemas/` folder creates a grab bag of unrela
 
 ## Incorrect
 
-```
-// BUG: everything in one folder — no layering, unclear ownership
+```text
+# BUG: everything in one folder — no layering, unclear ownership
 src/
   schemas/
-    user.ts          // used by API AND form AND env?
+    user.ts          # used by API AND form AND env?
     order.ts
     config.ts
     form-profile.ts
@@ -34,28 +34,28 @@ export { UserSchema } // leaking parsing into domain
 
 ## Correct
 
-```
+```text
 src/
   api/
     users/
       route.ts
-      schemas.ts       // API request/response schemas for /users
+      schemas.ts       # API request/response schemas for /users
     orders/
       route.ts
-      schemas.ts       // API schemas for /orders
+      schemas.ts       # API schemas for /orders
   features/
     profile/
-      form-schema.ts   // form validation schema
+      form-schema.ts   # form validation schema
       ProfileForm.tsx
   config/
-    env.ts             // env var schema, parsed at startup
+    env.ts             # env var schema, parsed at startup
   domain/
-    types.ts           // z.infer types only — no raw schemas
+    types.ts           # z.infer types only — no raw schemas
 ```
 
 ```typescript
 // api/users/schemas.ts — co-located with the route
-import { z } from "zod"
+import * as z from "zod"
 
 export const CreateUserBody = z.object({
   name: z.string().min(1),
@@ -67,10 +67,12 @@ export const UserResponse = z.object({
   name: z.string(),
   email: z.email(),
 })
+```
 
+```typescript
 // domain/types.ts — inferred types only, no raw schemas
 import type { CreateUserBody, UserResponse } from "../api/users/schemas"
-import type { z } from "zod"
+import type * as z from "zod"
 
 export type CreateUser = z.infer<typeof CreateUserBody>
 export type User = z.infer<typeof UserResponse>

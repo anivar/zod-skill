@@ -6,105 +6,59 @@ Mechanical enforcement catches mistakes before code review. Use ESLint rules, CI
 
 ## ESLint: `no-restricted-syntax` Rules
 
-### Ban `parse()` in Application Code
+ESLint 10 reads only the flat config format, `eslint.config.js`; it no longer supports `.eslintrc`. The config below was run with ESLint 10.14 and typescript-eslint 8.72: it flagged each banned call, skipped `JSON.parse()` and `Date.parse()`, and skipped `config/env.ts`.
 
-Force `safeParse()` usage. `parse()` throws, which leads to unhandled exceptions.
+```js
+// eslint.config.js
+import { defineConfig } from "eslint/config"
+import tseslint from "typescript-eslint"
 
-```jsonc
-// .eslintrc.json
-{
-  "rules": {
-    "no-restricted-syntax": [
-      "error",
-      {
-        "selector": "CallExpression[callee.property.name='parse'][callee.object.type!='ThisExpression']",
-        "message": "Use safeParse() instead of parse(). parse() throws on invalid input. See: rules/parse-use-safeParse.md"
-      }
-    ]
-  }
-}
-```
-
-To allow `parse()` in specific files (e.g., env config where crashing on invalid env is intentional), use ESLint overrides:
-
-```jsonc
-{
-  "overrides": [
-    {
-      "files": ["**/config/env.ts", "**/env.ts"],
-      "rules": {
-        "no-restricted-syntax": "off"
-      }
-    }
-  ]
-}
-```
-
-### Detect `reportInput` Usage
-
-`reportInput: true` leaks sensitive data in production.
-
-```jsonc
-{
-  "rules": {
-    "no-restricted-syntax": [
-      "error",
-      {
-        "selector": "Property[key.name='reportInput'][value.value=true]",
-        "message": "reportInput: true leaks sensitive data in production. Use: reportInput: process.env.NODE_ENV === 'development'. See: rules/error-input-security.md"
-      }
-    ]
-  }
-}
-```
-
-### Ban `z.nativeEnum()` (deprecated in v4)
-
-```jsonc
-{
-  "selector": "CallExpression[callee.property.name='nativeEnum']",
-  "message": "z.nativeEnum() is deprecated in Zod v4. Use z.enum(YourTSEnum) instead. See: rules/migrate-native-enum.md"
-}
-```
-
-### Ban `z.string().email()` (Use `z.email()`)
-
-```jsonc
-{
-  "selector": "CallExpression[callee.property.name='email'][callee.object.callee.property.name='string']",
-  "message": "Use z.email() instead of z.string().email() in Zod v4. See: rules/migrate-string-formats.md"
-}
-```
-
-### Full ESLint Config Example
-
-```jsonc
-{
-  "rules": {
-    "no-restricted-syntax": [
-      "error",
-      {
-        "selector": "CallExpression[callee.property.name='parse'][callee.object.type!='ThisExpression']",
-        "message": "Use safeParse() instead of parse(). See: rules/parse-use-safeParse.md"
-      },
-      {
-        "selector": "Property[key.name='reportInput'][value.value=true]",
-        "message": "reportInput: true leaks sensitive data. See: rules/error-input-security.md"
-      },
-      {
-        "selector": "CallExpression[callee.property.name='nativeEnum']",
-        "message": "z.nativeEnum() deprecated in v4. Use z.enum(). See: rules/migrate-native-enum.md"
-      }
-    ]
+const zodRules = [
+  {
+    // parse() throws; JSON.parse, Date.parse and URL.parse are not Zod
+    selector: "CallExpression[callee.property.name='parse']:not([callee.object.name=/^(JSON|Date|URL)$/])",
+    message: "Use safeParse() instead of parse(). parse() throws on invalid input. See: rules/parse-use-safeParse.md",
   },
-  "overrides": [
-    {
-      "files": ["**/config/env.ts", "**/env.ts"],
-      "rules": {
-        "no-restricted-syntax": "off"
-      }
-    }
-  ]
+  {
+    selector: "Property[key.name='reportInput'][value.value=true]",
+    message: "reportInput: true leaks sensitive data. Use: reportInput: process.env.NODE_ENV === 'development'. See: rules/error-input-security.md",
+  },
+  {
+    selector: "CallExpression[callee.property.name='nativeEnum']",
+    message: "z.nativeEnum() is deprecated. Use z.enum(YourTSEnum). See: rules/migrate-native-enum.md",
+  },
+  {
+    selector: "CallExpression[callee.property.name='email'][callee.object.callee.property.name='string']",
+    message: "Use z.email() instead of z.string().email(). See: rules/migrate-string-formats.md",
+  },
+]
+
+export default defineConfig([
+  {
+    files: ["src/**/*.ts"],
+    languageOptions: { parser: tseslint.parser },
+    rules: { "no-restricted-syntax": ["error", ...zodRules] },
+  },
+  {
+    // crashing on an invalid environment at startup is intended
+    files: ["**/config/env.ts", "**/env.ts"],
+    rules: { "no-restricted-syntax": "off" },
+  },
+])
+```
+
+The selectors match syntax, not types. The `parse` rule also flags `.parse()` on other libraries, such as `path.parse()`; extend the exclusion list for the ones your code uses. For type-aware checks, deprecated Zod APIs carry `@deprecated` tags, which `@typescript-eslint/no-deprecated` reports. In the same run, it reported `z.nativeEnum()` and `z.string().email()` with Zod's own replacement text:
+
+```js
+// eslint.config.js: type-aware rule; needs a tsconfig.json
+{
+  files: ["src/**/*.ts"],
+  languageOptions: {
+    parser: tseslint.parser,
+    parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
+  },
+  plugins: { "@typescript-eslint": tseslint.plugin },
+  rules: { "@typescript-eslint/no-deprecated": "error" },
 }
 ```
 
@@ -116,8 +70,8 @@ Detect unintended schema changes by committing JSON Schema snapshots and failing
 
 ```typescript
 // scripts/export-schemas.ts
-import { z } from "zod"
-import { writeFileSync, mkdirSync } from "fs"
+import * as z from "zod"
+import { writeFileSync, mkdirSync } from "node:fs"
 import { UserSchema, OrderSchema } from "../src/api/schemas"
 
 const schemas = {
@@ -199,7 +153,7 @@ Shows exported symbols with no imports. Review and remove dead schemas.
 
 ## Circular Dependency Detection
 
-Schemas that import each other create circular dependencies that cause runtime crashes.
+Schema modules that import each other can fail at import time: a schema that reads another module's export before that module has run throws a `ReferenceError`. Inside one module, use a getter (see `schema-recursive-types`).
 
 ### With madge
 
@@ -214,23 +168,19 @@ npx madge --image graph.svg --extensions ts src/
 ### CI Integration
 
 ```yaml
+# madge exits 1 when it finds a cycle, which fails the step
 - name: Check circular dependencies
-  run: |
-    npx madge --circular --extensions ts src/
-    if [ $? -ne 0 ]; then
-      echo "::error::Circular dependencies detected"
-      exit 1
-    fi
+  run: npx madge --circular --extensions ts src/
 ```
 
 ## Custom ESLint Rule Messages
 
-Include remediation instructions in ESLint messages so developers know exactly what to do:
+Include remediation instructions in ESLint messages so developers know exactly what to do. Add the entry to `zodRules` above:
 
-```jsonc
+```js
 {
-  "selector": "CallExpression[callee.property.name='parse']",
-  "message": "Use safeParse() instead of parse().\n\nparse() throws ZodError on invalid input.\nsafeParse() returns { success, data | error }.\n\nReplace:\n  schema.parse(data)\nWith:\n  const result = schema.safeParse(data)\n  if (!result.success) { /* handle error */ }\n\nSee: rules/parse-use-safeParse.md"
+  selector: "CallExpression[callee.property.name='parse']:not([callee.object.name=/^(JSON|Date|URL)$/])",
+  message: "Use safeParse() instead of parse().\n\nparse() throws ZodError on invalid input.\nsafeParse() returns { success, data | error }.\n\nReplace:\n  schema.parse(data)\nWith:\n  const result = schema.safeParse(data)\n  if (!result.success) { /* handle error */ }\n\nSee: rules/parse-use-safeParse.md",
 }
 ```
 

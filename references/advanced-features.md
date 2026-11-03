@@ -1,5 +1,7 @@
 # Advanced Features Reference
 
+Docs: zod.dev/api, zod.dev/codecs, zod.dev/metadata · Zod 4.6.7
+
 ## Codecs
 
 Bidirectional transforms — decode (parse) and encode (serialize).
@@ -14,18 +16,9 @@ const parsed = DateCodec.parse("2024-01-01T00:00:00Z") // Date
 const serialized = DateCodec.encode(parsed)              // "2024-01-01T00:00:00.000Z"
 ```
 
-### Built-in Codecs
+### Codec Recipes
 
-```typescript
-// ISO datetime codec (string ↔ Date)
-z.iso.datetime()
-
-// Use with codec for custom decode/encode
-z.codec(z.iso.datetime(), z.date(), {
-  decode: (s) => new Date(s),
-  encode: (d) => d.toISOString(),
-})
-```
+Zod has no built-in codecs. `z.iso.datetime()` is a string format: it validates a string and returns it unchanged. The zod.dev codecs page lists recipes to copy into your code, such as `isoDatetimeToDate`, `stringToInt`, `epochSecondsToDate`, `jsonCodec` and `base64ToBytes`; they are "not included as first-class APIs".
 
 ### When to Use Codecs vs Transforms
 
@@ -33,7 +26,7 @@ z.codec(z.iso.datetime(), z.date(), {
 |---|---|---|
 | Direction | One-way (input → output) | Bidirectional |
 | Use when | Only parsing | Round-trip (parse + serialize) |
-| Encoding | Not supported | `schema.encode(value)` |
+| Encoding | Throws `$ZodEncodeError` | `schema.encode(value)` |
 
 ## Branded Types
 
@@ -43,13 +36,14 @@ Nominal typing — prevents mixing structurally identical types.
 const USD = z.number().brand<"USD">()
 const EUR = z.number().brand<"EUR">()
 
-type USD = z.infer<typeof USD> // number & { __brand: "USD" }
-type EUR = z.infer<typeof EUR> // number & { __brand: "EUR" }
+type USD = z.infer<typeof USD> // number & z.$brand<"USD">
+type EUR = z.infer<typeof EUR> // number & z.$brand<"EUR">
 
 // TypeScript prevents mixing
 function pay(amount: USD) { /* ... */ }
 const euros = EUR.parse(100)
-pay(euros) // TypeScript error!
+// @ts-expect-error EUR is not assignable to USD
+pay(euros)
 ```
 
 ### Common Use Cases
@@ -70,7 +64,7 @@ const Slug = z.string().regex(/^[a-z0-9-]+$/).brand<"Slug">()
 
 ## .readonly()
 
-Output type becomes `Readonly<T>`.
+Output type becomes `Readonly<T>`, and the parsed value is frozen with `Object.freeze()`.
 
 ```typescript
 const Config = z.object({
@@ -97,19 +91,22 @@ const UserSchema = z.object({
 
 ### Registries
 
+A registry maps schemas to metadata. Add a schema with `registry.add(schema, meta)`, or with `schema.register(registry, meta)`, which returns the schema. `.meta()` adds to `z.globalRegistry`, which `z.toJSONSchema()` reads.
+
 ```typescript
 // Global registry
-z.globalRegistry.register(UserSchema, {
+z.globalRegistry.add(UserSchema, {
   id: "User",
   description: "User account schema",
 })
 
 // Custom typed registry
 const uiRegistry = z.registry<{ label: string; widget: string }>()
-uiRegistry.register(UserSchema.shape.name, {
+uiRegistry.add(UserSchema.shape.name, {
   label: "Name",
   widget: "text-input",
 })
+const Bio = z.string().register(uiRegistry, { label: "Bio", widget: "textarea" })
 ```
 
 ## JSON Schema
@@ -132,7 +129,7 @@ const jsonSchema = z.toJSONSchema(UserSchema)
 
 ### z.fromJSONSchema(jsonSchema)
 
-Convert JSON Schema to Zod schema.
+Convert JSON Schema to Zod schema. Experimental: the zod.dev JSON Schema page says it is not part of the stable API.
 
 ```typescript
 const zodSchema = z.fromJSONSchema({
@@ -150,14 +147,19 @@ const zodSchema = z.fromJSONSchema({
 Validate function arguments and return type.
 
 ```typescript
-const MyFunc = z.function(
-  z.tuple([z.string(), z.number()]), // args
-  z.boolean()                         // return type
-)
+const MyFunc = z.function({
+  input: [z.string(), z.number()], // parameters: an array or a z.tuple()
+  output: z.boolean(),             // return type
+})
 
 type MyFunc = z.infer<typeof MyFunc>
-// (arg0: string, arg1: number) => boolean
+// a function from (string, number) to boolean
+
+const longerThan = MyFunc.implement((s, n) => s.length > n)
+longerThan("abc", 1) // true; bad arguments or a bad return value throw
 ```
+
+In Zod 4, `z.function()` is no longer a schema, and the Zod 3 form `z.function(args, returns)` does not type-check. On 4.6.7 the error it throws is a `z.core.$ZodError`, not a `z.ZodError`, so `instanceof z.ZodError` is false. Use `.implementAsync()` for async functions.
 
 ## z.instanceof()
 
@@ -172,7 +174,7 @@ ErrorSchema.parse("not an error")    // fails
 ## Template Literals
 
 ```typescript
-const UserId = z.templateLiteral([z.literal("user_"), z.string()])
+const UserId = z.templateLiteral(["user_", z.string()])
 // Matches: "user_abc", "user_123"
 // Rejects: "abc", "admin_123"
 
@@ -190,9 +192,9 @@ const Route = z.templateLiteral([
 Zod schemas implement the Standard Schema interface, making them compatible with any library that supports it.
 
 ```typescript
-import type { StandardSchema } from "@standard-schema/spec"
+import type { StandardSchemaV1 } from "@standard-schema/spec"
 
-function validate(schema: StandardSchema, data: unknown) {
+function validate(schema: StandardSchemaV1, data: unknown) {
   return schema["~standard"].validate(data)
 }
 
@@ -205,7 +207,7 @@ validate(UserSchema, data)
 `z.codec()` gives a schema `.decode()` and `.encode()`, but the standalone
 functions are often what you want when the codec is applied somewhere generic:
 
-```ts
+```typescript
 const DateField = z.codec(z.iso.datetime(), z.date(), {
   decode: (s) => new Date(s),
   encode: (d) => d.toISOString(),
@@ -221,10 +223,11 @@ const Inverted = z.invertCodec(DateField)
 `z.invertCodec()` matters when the same transform is needed in both directions
 at different boundaries — reading from an API and writing back to it — and
 saves defining the mirror image by hand, which is where the two drift apart.
+It inverts only the codec you pass; codecs nested inside it are not inverted.
 
 ## String formats added after 4.0
 
-```ts
+```typescript
 z.guid()            // any GUID/UUID shape, looser than z.uuid()
 z.hash("sha256")    // also "sha1", "sha384", "sha512", "md5"
 ```
@@ -234,7 +237,7 @@ digest fails at the boundary rather than downstream.
 
 ## Strict optional properties
 
-```ts
+```typescript
 // `.optional()` accepts an explicit `undefined`; `.exactOptional()` does not —
 // the key must be absent rather than present-and-undefined.
 z.object({ nickname: z.string().exactOptional() })

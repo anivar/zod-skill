@@ -1,33 +1,37 @@
 ---
-title: Use Zod Mini for Client Bundles
+title: Zod Mini Only Under Strict Bundle Limits
 impact: MEDIUM
-description: Use Zod Mini (1.88kb) for bundle-critical client-side apps. Functional API instead of methods.
-tags: bundle-size, mini, client, tree-shaking
+description: Use Zod Mini only for client bundles with strict size limits; import it from zod/mini and load a locale.
+tags: bundle-size, mini, client, tree-shaking, locale
 ---
 
-# Use Zod Mini for Client Bundles
+# Zod Mini Only Under Strict Bundle Limits
 
 ## Problem
 
-Full Zod adds significant weight to client bundles. For form validation or client-side parsing where bundle size matters, Zod Mini provides the same core functionality at ~1.88kb gzipped.
+Zod Mini has the same features as Zod behind a functional API that bundlers can tree-shake. The saving is a few kilobytes, and the API is harder to discover. The zod.dev Zod Mini page recommends regular Zod unless bundle size is an uncommonly strict constraint, and says the saving does not matter on a server. Zod Mini also loads no locale, so every message reads "Invalid input" until you load one.
 
 ## Incorrect
 
 ```typescript
-// BAD: full Zod in a client bundle where size matters
-import { z } from "zod"
+// BAD: Zod Mini on a server, where a few kilobytes do not matter
+import * as z from "zod/mini"
 
-const LoginForm = z.object({
-  email: z.email(),
-  password: z.string().min(8),
+const Order = z.object({
+  sku: z.string().check(z.minLength(1)),
+  quantity: z.int().check(z.positive()),
 })
+// and with no locale loaded, every issue message is "Invalid input"
 ```
 
 ## Correct
 
 ```typescript
-// GOOD: Zod Mini for client bundles — 1.88kb gzipped
-import { z } from "zod/v4/mini"
+// GOOD: a size-constrained client bundle that shows messages to users
+import * as z from "zod/mini"
+import { en } from "zod/locales"
+
+z.config(en())
 
 const LoginForm = z.object({
   email: z.email(),
@@ -37,11 +41,16 @@ const LoginForm = z.object({
 
 ## Why
 
-Zod Mini uses a functional API (`.check()` with check functions) instead of the chainable method API. This enables better tree-shaking. Use full Zod on the server where bundle size doesn't matter, and Zod Mini on the client where it does.
+Measured by the zod.dev Zod Mini page (gzip): `z.boolean().parse(true)` bundles to 2.12 kB with Zod Mini and 5.91 kB with Zod; a three-key object schema bundles to 4.0 kB and 13.1 kB.
 
-| | Full Zod | Zod Mini |
+| | Zod | Zod Mini |
 |---|---|---|
-| Size (gzip) | ~13kb | ~1.88kb |
-| API style | Method chaining (`.min()`, `.max()`) | Functional (`.check(z.minLength())`) |
-| Features | All | Core (no `.describe()`, no JSON Schema) |
-| Use when | Server, Node.js, scripts | Client bundles, edge functions |
+| Import | `import * as z from "zod"` | `import * as z from "zod/mini"`, or the `@zod/mini` package, which tracks `zod` versions |
+| Checks | Methods: `.min(8)`, `.trim()`, `.refine()` | `.check(z.minLength(8), z.trim(), z.refine(...))` |
+| Wrappers | `.optional()`, `.nullable()` | `z.optional(s)`, `z.nullable(s)` |
+| Error messages | English locale loaded | None loaded: "Invalid input" until `z.config(en())` |
+| JSON Schema, metadata | `z.toJSONSchema()`, `.meta()`, `.describe()` | `z.toJSONSchema()`; `z.meta()` and `z.describe()` are checks |
+| Cyclic input to recursive schemas | Works | Needs a registered memoizer |
+| Use when | Servers, scripts, most front ends | Client bundles with a strict size budget |
+
+A library that must accept both Zod and Zod Mini schemas builds against `zod/v4/core` (zod.dev/library-authors).

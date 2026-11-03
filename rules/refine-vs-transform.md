@@ -1,43 +1,45 @@
 ---
 title: Refine for Validation, Transform for Conversion
 impact: HIGH
-description: Use .refine() for validation (returns boolean), .transform() for shape conversion (returns new value).
-tags: refine, transform, pipe, validation
+description: Use .refine() to validate, .transform() to convert, and .pipe() to validate the converted value.
+tags: refine, transform, pipe, validation, codec
 ---
 
 # Refine for Validation, Transform for Conversion
 
 ## Problem
 
-Using `.transform()` for validation (throwing on invalid input) or `.refine()` for type conversion mixes concerns and produces confusing errors.
+Validating inside `.transform()` by throwing bypasses Zod's errors: the exception escapes `safeParse()`. Checking a numeric string with `parseInt` accepts strings that only start with digits, because `parseInt("12abc")` returns `12`.
 
 ## Incorrect
 
 ```typescript
-// BUG: validation inside transform — throws instead of returning ZodError
-const SafeInt = z.string().transform((val) => {
-  const n = parseInt(val, 10)
-  if (isNaN(n)) throw new Error("Not a number") // bypasses Zod errors
+// BUG: the throw escapes safeParse() as a plain Error
+const ThrowingInt = z.string().transform((val) => {
+  const n = Number.parseInt(val, 10)
+  if (Number.isNaN(n)) throw new Error("Not a number")
   return n
 })
+
+// BUG: parseInt("12abc") is 12, so "12abc" passes
+const LooseInt = z
+  .string()
+  .refine((val) => !Number.isNaN(Number.parseInt(val, 10)), { error: "Must be a numeric string" })
+  .transform((val) => Number.parseInt(val, 10))
 ```
 
 ## Correct
 
 ```typescript
-// GOOD: validate first, then transform
-const SafeInt = z.string()
-  .refine((val) => !isNaN(parseInt(val, 10)), {
-    error: "Must be a numeric string",
-  })
-  .transform((val) => parseInt(val, 10))
+// GOOD: check the string, convert it, then check the number
+const StringToInt = z.string().regex(z.regexes.integer).transform(Number).pipe(z.int().min(0))
 
-// BETTER: use pipe for staged parsing
-const SafeInt = z.string()
-  .pipe(z.coerce.number())
-  .pipe(z.int())
+StringToInt.parse("42") // 42
+StringToInt.safeParse("12abc").success // false
 ```
+
+When the value must also go back to a string, use a codec instead (see `pattern-codecs`).
 
 ## Why
 
-`.refine()` = "is this valid?" (returns boolean, adds issue if false). `.transform()` = "convert this value" (returns the new value). `.pipe()` = "parse with schema A, then feed the result to schema B." Keeping them separate makes schemas readable, composable, and error messages accurate.
+`.refine()` answers "is this valid?" and adds an issue when it is not. `.transform()` returns a new value and must not throw (zod.dev/api, "Transforms"). `.pipe()` feeds the output of one schema into the next, so the converted value is validated with its own checks. To report an issue from inside a transform, push it onto `ctx.issues` and return `z.NEVER`.

@@ -14,6 +14,8 @@ tags: parsing, safeParse, error-handling, validation
 ## Incorrect
 
 ```typescript
+const UserSchema = z.object({ name: z.string(), email: z.email() })
+
 // BUG: try/catch is verbose and catches unrelated errors
 function validateInput(data: unknown) {
   try {
@@ -21,7 +23,7 @@ function validateInput(data: unknown) {
     return { success: true, data: result }
   } catch (e) {
     if (e instanceof z.ZodError) {
-      return { success: false, errors: e.errors }
+      return { success: false, errors: e.issues }
     }
     throw e // rethrow non-Zod errors
   }
@@ -42,4 +44,4 @@ function validateInput(data: unknown) {
 
 ## Why
 
-`safeParse()` returns a discriminated union `{ success: true, data } | { success: false, error }`. No exceptions, no try/catch, no risk of catching unrelated errors. Use `parse()` only when invalid data is truly exceptional (e.g., internal config that should never be wrong).
+`safeParse()` returns a discriminated union `{ success: true, data } | { success: false, error }`. No exceptions, no try/catch, no risk of catching unrelated errors. Use `parse()` only when invalid data is truly exceptional (e.g., internal config that should never be wrong). When you need only a yes or no, `.validate()` returns a boolean without building an error (zod.dev/basics). `ZodError.errors` from Zod 3 is removed; read `.issues`.

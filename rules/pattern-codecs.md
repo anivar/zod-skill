@@ -36,10 +36,10 @@ const serialized = DateField.encode(parsed) // "2024-01-01T00:00:00.000Z"
 
 ## Why
 
-Codecs define a `decode` (parse direction) and `encode` (serialize direction) pair. This is essential for schemas that must round-trip through different representations — API input/output, database serialization, form values to/from domain types.
+Codecs define a `decode` (parse direction) and `encode` (serialize direction) pair, for values that round-trip between representations: API input and output, database rows, form values. `.parse()` takes `unknown`; `.decode()` and `.encode()` take typed input, so TypeScript catches a wrong argument. Calling `.encode()` on a schema that contains a `.transform()` throws `$ZodEncodeError`, a plain error rather than a `ZodError`. Defaults, prefaults and `.catch()` apply only when decoding. The zod.dev codecs page has copy-in recipes such as `stringToInt`, `epochSecondsToDate` and `jsonCodec`; Zod does not export them.
 
 | | `.transform()` | `z.codec()` |
 |---|---|---|
 | Direction | One-way (input → output) | Bidirectional (decode + encode) |
 | Use when | Only parsing (API input) | Round-trip (API input ↔ output) |
-| Encoding | Not supported | `schema.encode(value)` |
+| Encoding | Throws `$ZodEncodeError` | `schema.encode(value)` |

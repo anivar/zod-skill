@@ -9,11 +9,13 @@ tags: security, reportInput, logging, production
 
 ## Problem
 
-Zod v4's `reportInput` option includes the raw input value in error issues. If enabled in production, sensitive data (passwords, tokens, PII) ends up in error logs, monitoring systems, and API responses.
+The `reportInput` parse option includes the raw input value in each issue. Zod leaves it out by default for this reason (zod.dev/error-customization). If enabled in production, sensitive data (passwords, tokens, PII) ends up in error logs, monitoring systems, and API responses.
 
 ## Incorrect
 
 ```typescript
+const UserSchema = z.object({ email: z.email(), password: z.string().min(12) })
+
 // BUG: leaks passwords, tokens, PII into error messages
 app.post("/register", (req, res) => {
   const result = UserSchema.safeParse(req.body, { reportInput: true })

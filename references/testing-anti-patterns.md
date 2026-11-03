@@ -1,10 +1,12 @@
 # Zod Testing Anti-Patterns
 
+Checked against Zod 4.6.7, Vitest 5, fast-check 4 and zod-schema-faker 3.
+
 ## Table of Contents
 
 - Testing schema internals instead of behavior
 - Not testing error paths
-- Using parse() instead of safeParse() in tests
+- Using parse() with toThrow() in tests
 - Not testing boundary values
 - Hardcoding mock data instead of generating
 - Duplicating schema logic in assertions
@@ -21,11 +23,17 @@
 ## Testing schema internals instead of behavior
 
 ```typescript
-// BAD: testing internal structure — breaks on refactors
+const UserSchema = z.object({
+  name: z.string().min(1),
+  email: z.email(),
+  age: z.int().min(0).max(150).optional(),
+})
+
+// BAD: testing internal structure — breaks on refactors and upgrades
 it("has correct shape", () => {
   expect(UserSchema.shape.name).toBeDefined()
-  expect(UserSchema.shape.email).toBeDefined()
-  expect(UserSchema._def.typeName).toBe("ZodObject")
+  expect(UserSchema._zod.def.type).toBe("object")
+  // Zod 3 tests read _def.typeName, which is undefined in Zod 4
 })
 
 // GOOD: test parse behavior — stable across refactors
@@ -46,6 +54,8 @@ it("rejects missing name", () => {
 ## Not testing error paths
 
 ```typescript
+const validUser = { name: "Alice", email: "alice@example.com", age: 30 }
+
 // BAD: only testing valid inputs
 describe("UserSchema", () => {
   it("accepts valid user", () => {
@@ -80,32 +90,33 @@ describe("UserSchema", () => {
 })
 ```
 
-## Using parse() instead of safeParse() in tests
+## Using parse() with toThrow() in tests
 
 ```typescript
-// BAD: test crashes with ZodError stack trace instead of clean failure
+const invalidData = { name: "", email: "bad" }
+
+// BAD: passes on any thrown error, not only a validation failure;
+// a TypeError from a bug in a transform also passes
 it("rejects invalid data", () => {
   expect(() => UserSchema.parse(invalidData)).toThrow()
-  // If schema changes to accept this data, test still "passes"
-  // because no throw means no assertion runs
 })
 
 // BAD: try/catch obscures the test intent
 it("rejects invalid data", () => {
   try {
     UserSchema.parse(invalidData)
-    fail("should have thrown")
+    throw new Error("should have thrown")
   } catch (e) {
     expect(e).toBeInstanceOf(z.ZodError)
   }
 })
 
-// GOOD: clean, predictable assertions
+// GOOD: assert on the result and the issues
 it("rejects invalid data", () => {
   const result = UserSchema.safeParse(invalidData)
   expect(result.success).toBe(false)
   if (!result.success) {
-    expect(result.error.issues).toHaveLength(2)
+    expect(result.error.issues.map((i) => i.code)).toEqual(["too_small", "invalid_format"])
   }
 })
 ```
@@ -136,18 +147,22 @@ it.each([
 ## Hardcoding mock data instead of generating
 
 ```typescript
-// BAD: manual mock data drifts from schema
-const mockUser = {
+const MemberSchema = UserSchema.extend({ role: z.enum(["admin", "member"]) })
+
+// BAD: a hand-written fixture; every schema change needs a hand edit
+const mockMember = {
   name: "Test User",
   email: "test@test.com",
   age: 25,
-  // forgot to add 'role' when schema was updated
+  // 'role' was added to the schema and not here, so this test now fails
 }
 
-it("accepts mock user", () => {
-  expect(UserSchema.safeParse(mockUser).success).toBe(true) // fails silently
+it("accepts mock member", () => {
+  expect(MemberSchema.safeParse(mockMember).success).toBe(true)
 })
+```
 
+```typescript
 // GOOD: generate from schema — always in sync
 import { faker } from "@faker-js/faker"
 import { fake, seed, setFaker } from "zod-schema-faker/v4"
@@ -155,15 +170,17 @@ import { fake, seed, setFaker } from "zod-schema-faker/v4"
 beforeAll(() => setFaker(faker))
 beforeEach(() => seed(42))
 
-it("accepts generated user", () => {
-  const user = fake(UserSchema)
-  expect(UserSchema.safeParse(user).success).toBe(true)
+it("accepts generated member", () => {
+  const member = fake(MemberSchema)
+  expect(MemberSchema.safeParse(member).success).toBe(true)
 })
 ```
 
 ## Duplicating schema logic in assertions
 
 ```typescript
+const EmailSchema = z.email()
+
 // BAD: re-implementing validation in the test
 it("validates email format", () => {
   const email = "test@example.com"
@@ -183,9 +200,7 @@ it("validates email format", () => {
 ## Testing transform output without testing input validation
 
 ```typescript
-const DateString = z.string()
-  .refine((s) => !isNaN(Date.parse(s)), { error: "Invalid date" })
-  .transform((s) => new Date(s))
+const DateString = z.iso.date().transform((s) => new Date(s))
 
 // BAD: only testing the transform output
 it("transforms to Date", () => {
@@ -199,28 +214,28 @@ it("transforms valid date string", () => {
   expect(result.success).toBe(true)
   if (result.success) {
     expect(result.data).toBeInstanceOf(Date)
-    expect(result.data.getFullYear()).toBe(2024)
+    expect(result.data.getUTCFullYear()).toBe(2024)
   }
 })
 
 it("rejects invalid date string", () => {
-  const result = DateString.safeParse("not-a-date")
-  expect(result.success).toBe(false)
+  expect(DateString.safeParse("not-a-date").success).toBe(false)
+  expect(DateString.safeParse("2024-02-30").success).toBe(false)
 })
 ```
 
 ## Not testing optional/nullable combinations
 
 ```typescript
-const Schema = z.object({
+const ProfileSchema = z.object({
   name: z.string(),
   bio: z.string().optional(),
   avatar: z.string().nullable(),
 })
 
 // BAD: only testing with all fields present
-it("accepts user", () => {
-  expect(Schema.safeParse({
+it("accepts profile", () => {
+  expect(ProfileSchema.safeParse({
     name: "Alice",
     bio: "Hello",
     avatar: "https://example.com/img.png",
@@ -229,19 +244,19 @@ it("accepts user", () => {
 
 // GOOD: test all optional/nullable variants
 it("accepts without optional field", () => {
-  expect(Schema.safeParse({ name: "Alice", avatar: null }).success).toBe(true)
+  expect(ProfileSchema.safeParse({ name: "Alice", avatar: "https://example.com/img.png" }).success).toBe(true)
 })
 
 it("accepts with null nullable", () => {
-  expect(Schema.safeParse({ name: "Alice", avatar: null }).success).toBe(true)
+  expect(ProfileSchema.safeParse({ name: "Alice", avatar: null }).success).toBe(true)
 })
 
 it("rejects null for non-nullable optional", () => {
-  expect(Schema.safeParse({ name: "Alice", bio: null, avatar: null }).success).toBe(false)
+  expect(ProfileSchema.safeParse({ name: "Alice", bio: null, avatar: null }).success).toBe(false)
 })
 
 it("rejects undefined for non-optional nullable", () => {
-  expect(Schema.safeParse({ name: "Alice" }).success).toBe(false)
+  expect(ProfileSchema.safeParse({ name: "Alice" }).success).toBe(false)
   // avatar is nullable but not optional — must be explicitly provided
 })
 ```
@@ -249,28 +264,33 @@ it("rejects undefined for non-optional nullable", () => {
 ## Snapshot testing raw ZodError
 
 ```typescript
-// BAD: raw ZodError snapshots are noisy and brittle
+const invalid = { name: "Alice", email: "bad" }
+
+// BAD: the snapshot holds Zod's default message text and issue fields,
+// which change between Zod versions
 it("error matches snapshot", () => {
-  const result = schema.safeParse(invalid)
+  const result = UserSchema.safeParse(invalid)
   if (!result.success) {
-    expect(result.error).toMatchSnapshot() // huge, includes internals
+    expect(result.error).toMatchSnapshot()
   }
 })
 
 // GOOD: snapshot formatted output
 it("error matches snapshot", () => {
-  const result = schema.safeParse(invalid)
+  const result = UserSchema.safeParse(invalid)
   if (!result.success) {
     expect(z.flattenError(result.error)).toMatchSnapshot()
-    // Clean: { formErrors: [], fieldErrors: { email: ["Invalid email"] } }
+    // { formErrors: [], fieldErrors: { email: ["Invalid email address"] } }
   }
 })
 
 // GOOD: snapshot JSON Schema for schema shape
 it("schema shape matches snapshot", () => {
-  expect(z.toJSONSchema(schema)).toMatchSnapshot()
+  expect(z.toJSONSchema(UserSchema)).toMatchSnapshot()
 })
 ```
+
+Default messages are still Zod's text. For assertions that must survive upgrades, assert on issue `code` and `path`, or set your own messages.
 
 ## Not seeding random data generators
 
@@ -294,6 +314,8 @@ it("accepts generated data", () => {
 ## A property over a constant
 
 ```typescript
+import fc from "fast-check"
+
 // BAD: fc.constant(null) generates nothing. The counterexample is [null], and
 // fast-check's seed does not reach the faker, so the data that failed is lost
 it("schema accepts generated data", () => {
@@ -321,15 +343,20 @@ it("schema accepts generated data", () => {
 // BAD: schema unit tests pass but handler never calls safeParse
 // tests/user-schema.test.ts
 it("rejects invalid email", () => {
-  expect(UserSchema.safeParse({ email: "bad" }).success).toBe(false)
-})
-// But the actual handler does:
-app.post("/users", (req, res) => {
-  // No validation! req.body goes straight to the database
-  db.users.create(req.body)
+  expect(UserSchema.safeParse({ name: "Alice", email: "bad" }).success).toBe(false)
 })
 
+// But the actual handler does:
+app.post("/users", async (req, res) => {
+  // No validation! req.body goes straight to the database
+  res.status(201).json(await db.users.create(req.body))
+})
+```
+
+```typescript
 // GOOD: integration test verifies the boundary actually validates
+import request from "supertest"
+
 it("API rejects invalid input with field errors", async () => {
   const res = await request(app)
     .post("/api/users")
@@ -340,7 +367,7 @@ it("API rejects invalid input with field errors", async () => {
 })
 
 it("API accepts valid input", async () => {
-  const res = await request(app)
+  await request(app)
     .post("/api/users")
     .send({ name: "Alice", email: "alice@example.com", age: 30 })
     .expect(201)
@@ -395,11 +422,14 @@ it("produces structured errors for logging", () => {
 // BAD: schema changes land without mechanical review
 // Developer changes OrderSchema, no CI check, no snapshot diff
 // Consumers break silently because the field they depend on is gone
+```
 
+```typescript
 // GOOD: export and diff JSON Schema snapshots in CI
 // scripts/export-schemas.ts
-import { z } from "zod"
-import { writeFileSync } from "fs"
+import * as z from "zod"
+import { writeFileSync } from "node:fs"
+import { OrderSchema } from "../src/api/schemas"
 
 const jsonSchema = z.toJSONSchema(OrderSchema)
 writeFileSync(

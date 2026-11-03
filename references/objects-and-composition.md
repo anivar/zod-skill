@@ -1,5 +1,7 @@
 # Objects and Composition Reference
 
+Docs: zod.dev/api · Zod 4.6.7
+
 ## Object Variants
 
 ### z.object() — Strips Unknown Keys
@@ -23,7 +25,7 @@ const Config = z.strictObject({
 })
 
 Config.parse({ host: "localhost", port: 3000, debug: true })
-// ZodError: Unrecognized key "debug"
+// ZodError: Unrecognized key: "debug"
 ```
 
 ### z.looseObject() — Preserves Unknown Keys
@@ -73,11 +75,11 @@ const WithAge = User.extend({ age: z.number() })
 
 ### .safeExtend()
 
-Extend with compile-time error on conflicting keys.
+Like `.extend()`, but an overwritten key must keep a type assignable to the original, so the result still `extends` the original type. Use it to add or narrow keys on an object with refinements, where `.extend()` throws on an overwrite.
 
 ```typescript
-const WithAge = User.safeExtend({ age: z.number() })
-// TypeScript error if "age" already exists in User
+const Narrowed = User.safeExtend({ name: z.string().min(1) }) // OK: still a string
+// User.safeExtend({ name: z.number() }) is a TypeScript error
 ```
 
 ### .pick()
@@ -94,12 +96,13 @@ const NameOnly = User.pick({ name: true })
 Remove specific fields.
 
 ```typescript
-const NoPassword = User.omit({ password: true })
+const NoEmail = User.omit({ email: true })
+// z.object({ name: z.string() })
 ```
 
 ### .partial()
 
-Make all fields optional.
+Make all fields optional. `.exactPartial()` (Zod 4.5) makes them omittable without accepting an explicit `undefined`. `z.deepPartial(schema)` recurses into nested objects, arrays and unions. `.partial()` and `z.deepPartial()` throw on an object that carries its own refinement.
 
 ```typescript
 const PartialUser = User.partial()
@@ -129,7 +132,7 @@ const Config = z.object({ host: z.string() }).catchall(z.string())
 
 ## Recursive Objects
 
-Use the getter pattern (v4 — `z.lazy()` is removed).
+Use a getter. `z.lazy()` still works, but the getter keeps object methods and infers the type. Since Zod 4.5, cyclic input parses too.
 
 ```typescript
 const Category = z.object({
@@ -150,7 +153,7 @@ z.array(z.string())           // string[]
 z.array(z.string()).min(1)    // at least 1 element
 z.array(z.string()).max(10)   // at most 10 elements
 z.array(z.string()).length(5) // exactly 5 elements
-z.array(z.string()).nonempty() // at least 1, narrows type to [string, ...string[]]
+z.array(z.string()).nonempty() // at least 1 element
 ```
 
 ## Tuples
@@ -172,26 +175,29 @@ z.tuple([z.string(), z.number()]).rest(z.boolean())
 z.record(z.string(), z.number())
 // Record<string, number>
 
-// Enum keys
+// Enum keys: every key is required
 z.record(z.enum(["a", "b"]), z.number())
-// { a: number; b: number }
+// { a: number; b: number }; { a: 1 } fails
 ```
 
 ### z.partialRecord()
 
-Values can be undefined.
+Keys from an enum or literal key schema are optional.
 
 ```typescript
-z.partialRecord(z.string(), z.number())
-// Record<string, number | undefined>
+z.partialRecord(z.enum(["a", "b"]), z.number())
+// { a?: number; b?: number }; { a: 1 } passes
 ```
 
 ### z.looseRecord()
 
-Preserves extra keys.
+`z.record()` fails on a key that does not match the key schema. `z.looseRecord()` passes such keys through unchanged, which suits pattern properties combined with an object.
 
 ```typescript
-z.looseRecord(z.string(), z.number())
+const Contact = z
+  .object({ name: z.string() })
+  .and(z.looseRecord(z.string().regex(/_phone$/), z.e164()))
+// home_phone and work_phone are validated as E.164; other keys pass through
 ```
 
 ## Maps and Sets
@@ -217,7 +223,7 @@ z.union([z.string(), z.number()])
 
 ### z.discriminatedUnion()
 
-O(1) dispatch on a shared discriminator field.
+Picks the branch by a shared discriminator field and validates only that branch.
 
 ```typescript
 z.discriminatedUnion("type", [
@@ -231,11 +237,11 @@ z.discriminatedUnion("type", [
 Exactly one must match.
 
 ```typescript
-z.xor(
+z.xor([
   z.object({ email: z.email() }),
   z.object({ phone: z.string() }),
-)
-// Must have email OR phone, not both
+])
+// { phone } passes; { email, phone } fails because both branches match
 ```
 
 ## Intersection
@@ -248,4 +254,4 @@ z.intersection(
 // { name: string; age: number }
 ```
 
-Prefer `.extend()` or spread over intersection for object merging — intersection has edge cases with overlapping keys.
+Prefer `.extend()` or spread over intersection for object merging: `z.intersection()` returns a `ZodIntersection`, which has no `.pick()`, `.omit()` or other object methods (zod.dev/api, "Intersections").

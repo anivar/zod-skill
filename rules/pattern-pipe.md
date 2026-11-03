@@ -33,10 +33,10 @@ const PortNumber = z
   .pipe(z.int().min(1).max(65535)) // stage 2: validate range
 
 PortNumber.parse("8080") // 8080
-PortNumber.parse("abc") // ZodError: stage 1 fails
-PortNumber.parse("99999") // ZodError: stage 2 fails
+PortNumber.safeParse("abc").success // false: stage 1 fails
+PortNumber.safeParse("99999").success // false: stage 2 fails
 ```
 
 ## Why
 
-`.pipe()` feeds the output of one schema into another. Each stage produces proper Zod errors on failure. This is cleaner than manual transforms with throws, and each stage's type is properly inferred.
+`.pipe()` feeds the output of one schema into another. Each stage produces Zod issues on failure, and each stage's type is inferred. `z.coerce.number()` accepts whatever `Number()` accepts, so `"0x50"` becomes 80, `"1e3"` becomes 1000 and `" 80 "` becomes 80. When only decimal digits are valid, check the string first: `z.string().regex(z.regexes.integer).transform(Number).pipe(z.int().min(1).max(65535))`.

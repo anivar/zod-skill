@@ -15,11 +15,11 @@ When a schema contains async refinements (`.refine(async ...)`) or async transfo
 
 ```typescript
 const UniqueEmail = z.email().refine(
-  async (email) => !(await db.users.exists({ email })),
+  async (email) => !(await db.users.exists(email)),
   { error: "Email already registered" }
 )
 
-// BUG: sync parse with async refinement — throws error
+// BUG: sync parse with an async refinement throws $ZodAsyncError
 const result = UniqueEmail.safeParse(input)
 ```
 
@@ -27,7 +27,7 @@ const result = UniqueEmail.safeParse(input)
 
 ```typescript
 const UniqueEmail = z.email().refine(
-  async (email) => !(await db.users.exists({ email })),
+  async (email) => !(await db.users.exists(email)),
   { error: "Email already registered" }
 )
 
@@ -40,4 +40,4 @@ if (!result.success) {
 
 ## Why
 
-Zod separates sync and async parsing. If any refinement or transform in the schema chain is async, you must use `parseAsync()` or `safeParseAsync()`. Using the sync version will throw, not silently skip — but this error is easy to miss in testing if you only test the happy path.
+Zod separates sync and async parsing. If any refinement or transform in the schema chain is async, you must use `parseAsync()` or `safeParseAsync()`. The sync version throws `$ZodAsyncError` ("Encountered Promise during synchronous parse"); it does not skip the refinement. The same holds for `.validate()`, whose async form is `.validateAsync()`. Test the async path, because a happy-path test of another schema does not reach it.

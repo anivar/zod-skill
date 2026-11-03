@@ -20,21 +20,24 @@ const Shape = z.union([
   z.object({ type: z.literal("square"), side: z.number() }),
   z.object({ type: z.literal("rect"), width: z.number(), height: z.number() }),
 ])
-// Error on invalid input: "Invalid input" (unhelpful — which branch failed?)
+// { type: "triangle" } fails with one invalid_union issue at path [], message "Invalid input",
+// and an `errors` array holding every branch's issues
 ```
 
 ## Correct
 
 ```typescript
-// GOOD: uses discriminator for O(1) dispatch, targeted errors
+// GOOD: picks the branch by the discriminator; issues name the failing field
 const Shape = z.discriminatedUnion("type", [
   z.object({ type: z.literal("circle"), radius: z.number() }),
   z.object({ type: z.literal("square"), side: z.number() }),
   z.object({ type: z.literal("rect"), width: z.number(), height: z.number() }),
 ])
-// Error: "Invalid discriminator. Expected 'circle' | 'square' | 'rect'"
+// { type: "triangle" } fails at path ["type"]:
+//   "Invalid discriminator value. Expected 'circle' | 'square' | 'rect'"
+// { type: "circle", radius: "x" } reports only the circle branch: invalid_type at ["radius"]
 ```
 
 ## Why
 
-`discriminatedUnion` checks the discriminator field first, then only validates the matching branch. This gives O(1) dispatch instead of O(n) sequential checking, and error messages target the actual problem instead of listing every branch's failures.
+`discriminatedUnion` checks the discriminator field first, then only validates the matching branch. It does not try the other branches, so the issues name the field that is wrong. In Zod 4 a discriminator can be a literal, an enum, a union of literals, `null` or `undefined`, and a discriminated union can be an option of another one (zod.dev/v4). `z.getDiscriminatedOption(Shape, "circle")` (Zod 4.5) returns one branch as a `ZodObject`. To require that exactly one branch matches, use `z.xor([a, b])`.

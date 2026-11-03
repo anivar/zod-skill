@@ -54,4 +54,4 @@ const UserResponse = User.omit({ password: true })
 
 ## Why
 
-`pick()`, `omit()`, `partial()`, and `required()` derive new schemas from a base. Changes to the base propagate automatically to all derived schemas. The inferred types also stay in sync.
+`pick()`, `omit()`, `partial()`, and `required()` derive new schemas from a base. Changes to the base propagate automatically to all derived schemas. The inferred types also stay in sync. `.exactPartial()` (Zod 4.5) makes keys omittable without accepting an explicit `undefined`, and `z.deepPartial()` makes nested objects partial too. `.partial()` and `z.deepPartial()` throw on an object that carries its own refinement.

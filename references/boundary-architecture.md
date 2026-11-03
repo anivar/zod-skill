@@ -1,5 +1,7 @@
 # Boundary Architecture — Where Zod Fits
 
+Checked against Zod 4.6.7, Express 5, tRPC 11, React Hook Form 7 with @hookform/resolvers 7, and @t3-oss/env-nextjs 0.13.
+
 ## Overview
 
 Zod belongs at **system boundaries** — the points where your application receives data it doesn't control. Parse once at the boundary, then pass typed data inward. Domain logic should never see `unknown`.
@@ -9,7 +11,14 @@ Zod belongs at **system boundaries** — the points where your application recei
 ### In the Route Handler (Recommended for Most Cases)
 
 ```typescript
-app.post("/api/users", (req, res) => {
+const CreateUserSchema = z.object({ name: z.string().min(1), email: z.email() })
+type CreateUser = z.infer<typeof CreateUserSchema>
+
+async function createUser(input: CreateUser) {
+  return { id: crypto.randomUUID(), ...input }
+}
+
+app.post("/api/users", async (req, res) => {
   const result = CreateUserSchema.safeParse(req.body)
   if (!result.success) {
     return res.status(400).json({
@@ -24,8 +33,10 @@ app.post("/api/users", (req, res) => {
 ### As Middleware (For Shared Validation Logic)
 
 ```typescript
+import type * as express from "express"
+
 function validate<T extends z.ZodType>(schema: T) {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const result = schema.safeParse(req.body)
     if (!result.success) {
       return res.status(400).json({
@@ -37,8 +48,8 @@ function validate<T extends z.ZodType>(schema: T) {
   }
 }
 
-app.post("/api/users", validate(CreateUserSchema), (req, res) => {
-  // req.body is already validated and typed
+app.post("/api/users", validate(CreateUserSchema), async (req, res) => {
+  // req.body is validated, but Express still types it as any
   const user = await createUser(req.body)
   res.status(201).json(user)
 })
@@ -49,13 +60,23 @@ app.post("/api/users", validate(CreateUserSchema), (req, res) => {
 | Approach | Use When |
 |----------|----------|
 | Route handler | Schema is specific to one route, custom error responses needed |
-| Middleware | Same schema/error format across many routes |
+| Middleware | Same schema/error format across many routes; the handler loses the inferred type |
 
 ## tRPC — `.input()` Parsing
 
 tRPC handles boundary parsing for you via `.input()`:
 
 ```typescript
+import { initTRPC } from "@trpc/server"
+
+const t = initTRPC.create()
+const router = t.router
+const publicProcedure = t.procedure
+
+async function getUser(id: string) {
+  return { id, name: "Ada", email: "ada@example.com" }
+}
+
 export const userRouter = router({
   create: publicProcedure
     .input(CreateUserSchema) // tRPC calls safeParse internally
@@ -72,12 +93,13 @@ export const userRouter = router({
 })
 ```
 
-You don't call `safeParse()` yourself — tRPC does it and returns a typed error response automatically.
+You don't call `safeParse()` yourself. tRPC accepts any Standard Schema, including Zod 4 schemas, and answers invalid input with a `BAD_REQUEST` error.
 
 ## Next.js Server Actions
 
 ```typescript
 "use server"
+import { revalidatePath } from "next/cache"
 
 const CreatePostSchema = z.object({
   title: z.string().min(1),
@@ -105,6 +127,7 @@ export async function createPost(formData: FormData) {
 
 ```typescript
 export async function POST(request: Request) {
+  // request.json() rejects a body that is not JSON; catch it and answer 400 in production code
   const body = await request.json()
   const result = CreateUserSchema.safeParse(body)
 
@@ -124,7 +147,7 @@ export async function POST(request: Request) {
 
 The form library handles the boundary:
 
-```typescript
+```tsx
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 
@@ -134,6 +157,8 @@ const ProfileSchema = z.object({
 })
 
 type ProfileForm = z.infer<typeof ProfileSchema>
+
+declare function updateProfile(profile: ProfileForm): Promise<void>
 
 function ProfileEditor() {
   const { register, handleSubmit, formState: { errors } } = useForm<ProfileForm>({
@@ -165,7 +190,7 @@ Parse env vars once at application startup. Fail fast if the environment is misc
 const EnvSchema = z.object({
   DATABASE_URL: z.url(),
   API_KEY: z.string().min(1),
-  PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+  PORT: z.coerce.number().pipe(z.int().min(1).max(65535)).default(3000),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
 })
 
@@ -199,6 +224,8 @@ export const env = createEnv({
 Always validate data coming from external services — their schemas can change without warning.
 
 ```typescript
+class ExternalServiceError extends Error {}
+
 const WeatherResponse = z.object({
   temperature: z.number(),
   humidity: z.number().min(0).max(100),

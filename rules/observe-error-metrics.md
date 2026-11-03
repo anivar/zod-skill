@@ -14,6 +14,8 @@ Without metrics on validation failures, you have no visibility into schema behav
 ## Incorrect
 
 ```typescript
+const OrderSchema = z.object({ sku: z.string(), quantity: z.int().positive() })
+
 // No monitoring — validation is a black box
 app.post("/api/orders", (req, res) => {
   const result = OrderSchema.safeParse(req.body)
@@ -27,14 +29,16 @@ app.post("/api/orders", (req, res) => {
 ## Correct
 
 ```typescript
-import { z } from "zod"
+import * as z from "zod"
+
+const OrderSchema = z.object({ sku: z.string(), quantity: z.int().positive() })
 
 // Tracked safeParse wrapper
 function trackedSafeParse<T extends z.ZodType>(
   schema: T,
   data: unknown,
   schemaName: string
-): z.SafeParseReturnType<z.input<T>, z.output<T>> {
+): z.ZodSafeParseResult<z.output<T>> {
   const result = schema.safeParse(data)
 
   metrics.increment("zod.validation.attempt", { schema: schemaName })
@@ -55,6 +59,10 @@ function trackedSafeParse<T extends z.ZodType>(
   return result
 }
 
+function processOrder(order: z.infer<typeof OrderSchema>) {
+  return { accepted: order.quantity }
+}
+
 // Usage
 app.post("/api/orders", (req, res) => {
   const result = trackedSafeParse(OrderSchema, req.body, "OrderSchema")
@@ -63,7 +71,7 @@ app.post("/api/orders", (req, res) => {
       errors: z.flattenError(result.error).fieldErrors,
     })
   }
-  processOrder(result.data)
+  res.json(processOrder(result.data))
 })
 ```
 
