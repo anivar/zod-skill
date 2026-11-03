@@ -1,0 +1,53 @@
+# Compiles every TypeScript block in the skill, runs the behaviour claims, and checks that AGENTS.md
+# is generated from the current rules. The weekly job runs the same checks against zod@latest, so a
+# new Zod release that breaks a claim fails visibly. A release of the skill stays a manual step.
+name: gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.4
+      - name: Install the pinned zod, TypeScript and example libraries
+        working-directory: .github/check
+        run: bun install --frozen-lockfile
+      - name: Blocks, claims, AGENTS.md
+        working-directory: .github/check
+        run: bun run check
+
+  zod-latest:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.4
+      - name: Install, then move zod to the latest release
+        working-directory: .github/check
+        run: |
+          bun install --frozen-lockfile
+          bun add --dev --exact zod@latest
+          bun pm ls | grep ' zod@'
+      # agents.ts is skipped here: it requires the pinned zod to equal the version SKILL.md names.
+      - name: Blocks and claims against zod@latest
+        working-directory: .github/check
+        run: bun blocks.ts && bun test claims.test.ts

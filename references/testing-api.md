@@ -1,20 +1,30 @@
 # Zod Testing API Reference
 
+Checked against Zod 4.6.7, Vitest 5.1, fast-check 4 and zod-schema-faker 3.
+
 ## Schema Correctness Testing
 
 ### safeParse() for Tests
 
-Always use `safeParse()` in tests. `parse()` throws, which crashes the test instead of producing a clear failure.
+Assert on `safeParse()` results. `expect(() => schema.parse(data)).toThrow()` passes on any thrown error, such as a `TypeError` from a bug in a transform, so it does not prove that validation rejected the input.
 
 ```typescript
-// GOOD: assertion-based
-const result = schema.safeParse(data)
-expect(result.success).toBe(true)
-// or
-expect(result.success).toBe(false)
+const UserSchema = z.object({
+  name: z.string().min(1),
+  email: z.email(),
+  age: z.int().min(0).max(150),
+})
 
-// BAD: crash-based — if schema changes, test behavior is unpredictable
-expect(() => schema.parse(data)).toThrow()
+// GOOD: assertion-based
+const result = UserSchema.safeParse(data)
+expect(result.success).toBe(false)
+expect(result.error?.issues.map((i) => i.code)).toContain("invalid_type")
+
+// GOOD: a yes or no only
+expect(UserSchema.validate(data)).toBe(false)
+
+// BAD: passes on any error
+expect(() => UserSchema.parse(data)).toThrow()
 ```
 
 ### Testing Valid Data
@@ -151,6 +161,10 @@ it("produces too_small for under minimum", () => {
 ### Asserting Error Paths
 
 ```typescript
+const FormSchema = z
+  .object({ password: z.string().min(8), confirm: z.string() })
+  .refine((v) => v.password === v.confirm, { error: "Passwords don't match", path: ["confirm"] })
+
 it("targets the correct field", () => {
   const result = FormSchema.safeParse({
     password: "12345678",
@@ -193,7 +207,7 @@ npm install -D zod-schema-faker @faker-js/faker randexp
 ```typescript
 import { faker } from "@faker-js/faker"
 import { fake, seed, setFaker } from "zod-schema-faker/v4"
-import { z } from "zod"
+import * as z from "zod"
 
 // Call once in test setup (beforeAll or setupFiles)
 setFaker(faker)
@@ -232,8 +246,6 @@ schema `generateMock()` returns `undefined`. Use `zod-schema-faker/v4`.
 ### JSON Schema Snapshots
 
 ```typescript
-import { z } from "zod"
-
 it("schema shape matches snapshot", () => {
   const jsonSchema = z.toJSONSchema(UserSchema)
   expect(jsonSchema).toMatchSnapshot()
@@ -287,15 +299,18 @@ it("accepts valid request", async () => {
 ### Form Validation
 
 ```typescript
+const formData = { password: "12345678", confirm: "different" }
+
 it("produces form-compatible errors", () => {
   const result = FormSchema.safeParse(formData)
+  expect(result.success).toBe(false)
   if (!result.success) {
     const errors = z.flattenError(result.error)
     // Structure matches what form libraries expect
     expect(errors).toEqual({
       formErrors: expect.any(Array),
       fieldErrors: expect.objectContaining({
-        email: expect.any(Array),
+        confirm: expect.any(Array),
       }),
     })
   }
@@ -304,13 +319,23 @@ it("produces form-compatible errors", () => {
 
 ### Database Layer
 
+Call the code under test with a mock store, then assert on the mock. A test that only parses and then checks a mock it never passed anywhere proves nothing.
+
 ```typescript
-it("validates before insert", async () => {
-  const invalidUser = { name: "", email: "bad" }
-  const result = UserSchema.safeParse(invalidUser)
-  expect(result.success).toBe(false)
-  // Verify no database call was made
-  expect(db.insert).not.toHaveBeenCalled()
+type User = z.infer<typeof UserSchema>
+
+async function saveUser(input: unknown, store: { insert(user: User): Promise<void> }) {
+  const result = UserSchema.safeParse(input)
+  if (!result.success) return { ok: false as const, error: result.error }
+  await store.insert(result.data)
+  return { ok: true as const }
+}
+
+it("does not insert invalid data", async () => {
+  const store = { insert: vi.fn(async (_user: User) => {}) }
+  const outcome = await saveUser({ name: "", email: "bad" }, store)
+  expect(outcome.ok).toBe(false)
+  expect(store.insert).not.toHaveBeenCalled()
 })
 ```
 
@@ -408,11 +433,15 @@ data that failed is lost.
 ### Transform Output Testing
 
 ```typescript
+const InputSchema = z.object({ cents: z.string().regex(z.regexes.integer) })
+const OutputSchema = z.object({ cents: z.int() })
+const Transformed = InputSchema.transform((v) => ({ cents: Number(v.cents) }))
+
 it("transform output satisfies the output schema", () => {
   fc.assert(
     fc.property(fc.integer({ min: 0, max: 2 ** 31 - 1 }), (s) => {
       seed(s)
-      const result = InputSchema.safeParse(fake(InputSchema))
+      const result = Transformed.safeParse(fake(InputSchema))
       expect(result.success).toBe(true) // a generated input that does not parse fails the test
       expect(OutputSchema.safeParse(result.data).success).toBe(true)
     }),
@@ -458,6 +487,8 @@ function expectInvalid(schema: z.ZodType, data: unknown) {
 }
 
 // Usage
+const validData = { name: "Alice", email: "alice@example.com", age: 30 }
+
 it("accepts valid user", () => {
   const user = expectValid(UserSchema, validData)
   expect(user.name).toBe("Alice")
@@ -476,7 +507,7 @@ it("rejects invalid email", () => {
 Assert that schemas are imported from boundary layers, not from domain code. This enforces the architectural rule that parsing happens at boundaries.
 
 ```typescript
-import { execSync } from "child_process"
+import { execSync } from "node:child_process"
 
 describe("schema architecture", () => {
   it("domain layer does not import raw schemas", () => {
@@ -505,7 +536,7 @@ describe("schema dependencies", () => {
   it("has no circular dependencies", async () => {
     const result = await madge("src/", {
       fileExtensions: ["ts"],
-      tsConfigPath: "tsconfig.json",
+      tsConfig: "tsconfig.json",
     })
     const circular = result.circular()
     expect(circular).toHaveLength(0)
@@ -521,8 +552,8 @@ Export schemas as JSON Schema and commit snapshots. CI fails when schemas change
 
 ```typescript
 // scripts/export-schemas.ts
-import { z } from "zod"
-import { writeFileSync, mkdirSync } from "fs"
+import * as z from "zod"
+import { writeFileSync, mkdirSync } from "node:fs"
 import { UserSchema, OrderSchema } from "../src/api/schemas"
 
 const schemas = { User: UserSchema, Order: OrderSchema }
@@ -539,7 +570,7 @@ for (const [name, schema] of Object.entries(schemas)) {
 ### Snapshot Test
 
 ```typescript
-import { readFileSync } from "fs"
+import { readFileSync } from "node:fs"
 
 describe("schema drift detection", () => {
   it("UserSchema matches committed snapshot", () => {
@@ -607,44 +638,31 @@ describe("error observability", () => {
 
 ## Performance Testing
 
-### Benchmark Parse Time
-
-```typescript
-describe("schema performance", () => {
-  it("UserSchema parses within acceptable time", () => {
-    const validUser = { name: "Alice", email: "alice@example.com", age: 30 }
-
-    const start = performance.now()
-    for (let i = 0; i < 10_000; i++) {
-      UserSchema.safeParse(validUser)
-    }
-    const elapsed = performance.now() - start
-
-    // 10k parses should complete in under 100ms
-    expect(elapsed).toBeLessThan(100)
-  })
-})
-```
+Do not assert a wall-clock threshold in a unit test: the time moves between identical runs on shared CI machines, so the test fails at random. Use a benchmark and read the comparison.
 
 ### With Vitest Bench
 
+Vitest 5 runs benchmarks inside tests: the test context carries `bench`, and `bench.compare()` runs the registrations and reports them. The `bench` fixture works only in files that match `benchmark.include` (by default `*.bench.ts`); in a `*.test.ts` file it throws. Vitest marks the API experimental (vitest.dev/guide/benchmarking). Checked with Vitest 5.1.
+
 ```typescript
-import { bench, describe } from "vitest"
+// schema.bench.ts
+test("compares validate() with safeParse() on invalid input", async ({ bench }) => {
+  const invalidUser = { name: 123 }
 
-describe("schema benchmarks", () => {
-  const validUser = { name: "Alice", email: "alice@example.com", age: 30 }
-
-  bench("UserSchema.safeParse", () => {
-    UserSchema.safeParse(validUser)
-  })
-
-  bench("UserSchema.safeParse (invalid)", () => {
-    UserSchema.safeParse({ name: 123 })
-  })
+  await bench.compare(
+    bench("safeParse", () => {
+      UserSchema.safeParse(invalidUser)
+    }),
+    bench("validate", () => {
+      UserSchema.validate(invalidUser)
+    }),
+  )
 })
 ```
 
 Run with:
 ```bash
-vitest bench
+vitest bench --run
 ```
+
+With Vitest 4 and earlier, import `bench` from `"vitest"` as a top-level function instead.

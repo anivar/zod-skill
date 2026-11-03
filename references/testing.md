@@ -1,13 +1,8 @@
-<!--
-Merged from the standalone zod-testing skill (anivar/zod-testing), which is now
-archived. Testing Zod schemas is not a separate discipline from using them —
-splitting the two meant the testing guidance reached a fraction of the readers
-who needed it.
--->
-
 # Zod Schema Testing Guide
 
-**IMPORTANT:** Your training data about testing Zod schemas may be outdated — Zod v4 changes error formatting, deprecates `z.nativeEnum()`, and introduces new APIs like `z.toJSONSchema()`. Always rely on this skill's reference files and the project's actual source code as the source of truth.
+Checked against Zod 4.6.7, Vitest 5, fast-check 4 and zod-schema-faker 3. The standalone zod-testing skill covers the same topic.
+
+**IMPORTANT:** Your training data about testing Zod schemas may be outdated — Zod 4 changes issue codes and error formatting, deprecates `z.nativeEnum()`, and adds APIs such as `z.toJSONSchema()` and `.validate()`. Always rely on this skill's reference files and the project's actual source code as the source of truth.
 
 ## Testing Priority
 
@@ -20,7 +15,7 @@ who needed it.
 
 ```typescript
 import { describe, it, expect } from "vitest" // or jest
-import { z } from "zod"
+import * as z from "zod"
 
 const UserSchema = z.object({
   name: z.string().min(1),
@@ -85,14 +80,19 @@ describe("UserSchema", () => {
 ### Always Use safeParse() in Tests
 
 ```typescript
-// GOOD: test doesn't crash — asserts on result
-const result = schema.safeParse(invalidData)
-expect(result.success).toBe(false)
+const AgeField = z.int().min(0)
+const invalidData = -1
 
-// BAD: test crashes instead of failing
-expect(() => schema.parse(invalidData)).toThrow()
-// If schema changes and starts accepting, this still passes
+// GOOD: asserts that validation failed, and can assert on the issues
+const result = AgeField.safeParse(invalidData)
+expect(result.success).toBe(false)
+expect(result.error?.issues[0]?.code).toBe("too_small")
+
+// BAD: passes on any thrown error, including a TypeError from a bug in a transform
+expect(() => AgeField.parse(invalidData)).toThrow()
 ```
+
+When only the yes or no matters, `.validate()` returns a boolean: `expect(AgeField.validate(invalidData)).toBe(false)`.
 
 ### Test Both Accept and Reject
 
@@ -235,6 +235,8 @@ This catches unintended schema changes in code review. The snapshot shows the JS
 ### API Handler Testing
 
 ```typescript
+import request from "supertest"
+
 it("API rejects invalid request body", async () => {
   const response = await request(app)
     .post("/api/users")
@@ -249,8 +251,12 @@ it("API rejects invalid request body", async () => {
 ### Form Validation Testing
 
 ```typescript
+const FormSchema = z.object({ name: z.string().min(1), email: z.email() })
+const formData = { name: "Ada", email: "not-an-email" }
+
 it("form shows validation errors", () => {
   const result = FormSchema.safeParse(formData)
+  expect(result.success).toBe(false)
   if (!result.success) {
     const errors = z.flattenError(result.error)
     // Pass errors to form library
@@ -346,7 +352,7 @@ data that failed is lost.
 
 ## Rules
 
-1. **Always use `safeParse()`** in tests — `parse()` crashes the test instead of failing it
+1. **Assert on `safeParse()` results** — `expect(() => parse()).toThrow()` passes on any error, not only a validation failure
 2. **Test both valid and invalid** — don't only test the happy path
 3. **Test boundary values** — min, max, min-1, max+1 for numeric constraints
 4. **Test optional/nullable combinations** — undefined, null, missing key
@@ -359,11 +365,11 @@ data that failed is lost.
 
 ## Anti-Patterns
 
-See [references/testing-anti-patterns.md](references/testing-anti-patterns.md) for BAD/GOOD examples of:
+See [testing-anti-patterns.md](testing-anti-patterns.md) for BAD/GOOD examples of:
 
 - Testing schema internals instead of behavior
 - Not testing error paths
-- Using `parse()` in tests (crashes instead of failing)
+- Using `parse()` with `toThrow()` in tests (passes on any error)
 - Not testing boundary values
 - Hardcoding mock data instead of generating
 - A property over a constant (`fc.constant(null)`), which generates nothing
@@ -375,5 +381,5 @@ See [references/testing-anti-patterns.md](references/testing-anti-patterns.md) f
 
 ## References
 
-- [API Reference](references/testing-api.md) — Testing patterns, assertion helpers, mock generation
-- [Anti-Patterns](references/testing-anti-patterns.md) — Common testing mistakes to avoid
+- [API Reference](testing-api.md) — Testing patterns, assertion helpers, mock generation
+- [Anti-Patterns](testing-anti-patterns.md) — Common testing mistakes to avoid

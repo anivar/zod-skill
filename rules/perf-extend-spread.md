@@ -9,7 +9,7 @@ tags: performance, extend, spread, typescript
 
 ## Problem
 
-`.extend()` creates a new schema type at the TypeScript level, which is expensive at compile time. Chaining multiple `.extend()` calls compounds this cost.
+`.extend()` is expensive for the TypeScript compiler on large schemas, and a TypeScript limitation makes chained calls quadratically more expensive (zod.dev/api, "`.extend()`").
 
 ## Incorrect
 
@@ -34,4 +34,12 @@ const Full = z.object({ ...Base.shape, ...Extra })
 
 ## Why
 
-`.extend()` is fine for one-off extensions. But when building large type hierarchies, spreading `.shape` keeps compile times manageable. The runtime behavior is identical — this is purely a TypeScript compiler performance optimization.
+`.extend()` is fine for one-off extensions. For large hierarchies, spreading `.shape` into one `z.object()` keeps compile times down, and the same syntax works in Zod Mini. The two forms differ at runtime:
+
+| | `Base.extend({...})` | `z.object({ ...Base.shape, ... })` |
+|---|---|---|
+| Strictness of `Base` | Kept | Lost: you choose `z.object`, `z.strictObject` or `z.looseObject` |
+| Refinements on `Base` | Kept; throws if a new key overwrites an existing one | Lost: `.shape` holds only the fields |
+| Overwrite a key on a refined `Base` | Use `.safeExtend()`, which also checks the new schema is assignable | Allowed |
+
+Measured on zod 4.6.7. The zod.dev API page says `.extend()` throws on any schema with refinements; 4.6.7 throws only when a key is overwritten.

@@ -14,6 +14,8 @@ Raw `ZodError` objects contain deeply nested issue arrays with internal metadata
 ## Incorrect
 
 ```typescript
+const UserSchema = z.object({ name: z.string(), email: z.email() })
+
 // BUG: raw ZodError is noisy and unqueryable
 app.post("/api/users", (req, res) => {
   const result = UserSchema.safeParse(req.body)
@@ -28,6 +30,7 @@ app.post("/api/users", (req, res) => {
 
 ```typescript
 // BUG: console.log — no structure, no correlation
+const result = UserSchema.safeParse(data)
 if (!result.success) {
   console.log("Validation failed:", result.error)
 }
@@ -41,7 +44,7 @@ app.post("/api/users", (req, res) => {
   if (!result.success) {
     const flat = z.flattenError(result.error)
     logger.warn("validation_failed", {
-      requestId: req.id,
+      requestId: req.get("x-request-id"),
       schema: "UserSchema",
       path: req.path,
       formErrors: flat.formErrors,
@@ -54,6 +57,8 @@ app.post("/api/users", (req, res) => {
 
 ```typescript
 // Reusable helper for consistent structured logging
+type Logger = { warn(event: string, fields: Record<string, unknown>): void }
+
 function logValidationError(
   logger: Logger,
   opts: {

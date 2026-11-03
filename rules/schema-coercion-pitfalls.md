@@ -36,8 +36,9 @@ const Settings = z.object({
 Settings.parse({ debug: "false", verbose: "0" })
 // { debug: false, verbose: false }
 
-// z.stringbool() accepts: "true"/"false", "1"/"0", "yes"/"no", "on"/"off"
-// Rejects anything else with a validation error
+// z.stringbool() accepts, case-insensitively: "true"/"false", "1"/"0", "yes"/"no",
+// "on"/"off", "y"/"n", "enabled"/"disabled". Anything else is an invalid_value issue.
+// Change the sets with z.stringbool({ truthy: [...], falsy: [...] }) or { case: "sensitive" }.
 ```
 
 ## Why

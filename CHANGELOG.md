@@ -4,6 +4,61 @@ Notable changes to this skill. The version that matters most in each entry is
 the *upstream* one: a skill about a moving library is only as good as the
 release it was last checked against.
 
+## [1.2.2] — 2026-11-03
+
+Checked against zod 4.6.7 and these zod.dev pages (api, basics,
+error-customization, error-formatting, metadata, json-schema, codecs, compile, packages,
+v4 changelog, library-authors, and the 4.5 and 4.6 release posts). Ids (F, P, S, R)
+match the test names in `.github/check/claims.test.ts`.
+
+### Added
+
+- **`.github/check/`**, an executable check of the skill's text:
+  - `blocks.ts` type-checks every TypeScript block under `strict` with TypeScript 5.9.3
+    and zod 4.6.7. No diagnostic is filtered. A line that must not compile carries
+    `// @ts-expect-error`; a deprecated call needs a `// deprecated` comment, and that
+    comment needs a deprecated call.
+  - `claims.test.ts` runs each behaviour claim on zod 4.6.7 and guards the text against
+    each corrected claim, named by audit id.
+  - `agents.ts` generates `AGENTS.md` from `SKILL.md` and `rules/`, checks that the
+    baseline in `SKILL.md`, `README.md` and the pinned zod agree, and checks that every
+    reference to a rule id, a `references/` file or a relative link resolves.
+- **`.github/workflows/gate.yml`** runs the check on every pull request and push to
+  main, and weekly against `zod@latest`. Actions are pinned by commit.
+
+### Corrected
+
+- **APIs that do not exist or take other arguments:** `z.json()` parses no string (F1);
+  `z.function({ input, output })` (F2); `registry.add()` (F3); `z.file().mime()` (F4);
+  `z.float32()`/`z.float64()`, no `z.float()` (F5); `z.xor([a, b])` (F6);
+  `z.ZodSafeParseResult` (F7); `StandardSchemaV1` (F8); `.issues`, not `.errors` (F9).
+- **Things called removed that still work:** `z.lazy()` (P1), `message` (P2, deprecated),
+  `z.nativeEnum()` (P3, deprecated), `z.formatError()` (P4, deprecated).
+- **Wrong behaviour:** cyclic input parses since 4.5 (S1); Zod 4 issue codes (S2);
+  `.default()` short-circuits (S3); Zod Mini sizes, JSON Schema support and import path
+  (S4, S17); `.finite()`/`.safe()` (S5); `z.cuid()` deprecated (S6); `z.uuid()` accepts
+  every version (S7); no built-in codecs (S8); `z.$brand` (S10); `required_error` is a
+  type error and ignored at runtime (S11); `z.preprocess()` is not legacy (S12);
+  `z.properties()` is in both packages (S13); zod-testing is not archived (S14);
+  `.validate()` figures from the docs, 16x and 35x (S16). S9 is fixed by generating
+  `AGENTS.md`.
+- **Found by the check after the audit:** an object refinement runs after a failed check
+  and skips after a type error; `parseInt` accepts `"12abc"`, so the numeric-string
+  examples check with `z.regexes.integer`; `.extend()` on a refined object throws only on
+  an overwrite; `z.function()` throws a core `$ZodError`, not `z.ZodError`; Express
+  handlers that used `await` were not `async`; the middleware typed `req` as the DOM
+  `Request`; a database test asserted on a mock it never passed in; the
+  `expect(() => parse()).toThrow()` rationale was wrong (it fails when nothing throws,
+  and passes on any error); the ESLint examples used `.eslintrc`, which ESLint 10 does not
+  read, and the `parse` selector also banned `JSON.parse()`; Vitest 5 has no top-level
+  `bench` export; madge's option is `tsConfig`; the heading anchors in `AGENTS.md`.
+- **CHANGELOG 1.1.0** says `.apply()` was left out because the docs did not show it.
+  zod.dev/api documents `.apply()`, and the skill covers it (S15).
+
+At `1f0cd1c` the block check reports 303 findings in 262 blocks; 166 of them are names
+an example used without declaring. Now: 248 blocks, 0 findings; 74 claims pass. Against
+`1f0cd1c`, all 37 text guards fail.
+
 ## [1.2.1] — 2026-11-03
 
 Audited the testing references against zod-schema-faker 3.0.1, @faker-js/faker 10.6.0,

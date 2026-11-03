@@ -14,6 +14,8 @@ When `safeParse()` calls are scattered throughout domain logic, every function m
 ## Incorrect
 
 ```typescript
+const OrderSchema = z.object({ id: z.string(), total: z.number().nonnegative() })
+
 // BUG: domain logic handles unknown input and parsing
 function calculateDiscount(data: unknown) {
   const result = OrderSchema.safeParse(data)

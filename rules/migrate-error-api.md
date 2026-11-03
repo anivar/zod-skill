@@ -1,44 +1,42 @@
 ---
 title: "v4: Unified Error Parameter"
 impact: MEDIUM
-description: Use v4 error parameter everywhere. message, required_error, invalid_type_error, errorMap removed.
-tags: migration, v4, errors, message
+description: Replace message, required_error, invalid_type_error and errorMap with the error parameter.
+tags: migration, v4, errors, message, errorMap
 ---
 
 # v4: Unified Error Parameter
 
 ## Problem
 
-Zod v3 had multiple ways to customize errors: `message`, `required_error`, `invalid_type_error`, and `errorMap`. Zod v4 replaces all of them with a single `error` parameter.
+Zod 3 had four ways to customize errors: `message`, `required_error`, `invalid_type_error` and `errorMap`. Zod 4 replaces them with one `error` parameter. `message` still works and is deprecated. The other three are gone: TypeScript rejects them, and at runtime Zod ignores them.
 
 ## Incorrect
 
 ```typescript
-// BAD: all removed in v4
-const name = z.string({ required_error: "Required", invalid_type_error: "Not a string" })
-const age = z.number().min(18, { message: "Too young" })
-const email = z.email({ errorMap: myErrorMap })
+// BAD: Zod 3 parameters
+const name = z.string({
+  // @ts-expect-error not a Zod 4 parameter; ignored at runtime
+  required_error: "Required",
+})
+// @ts-expect-error errorMap is now `error`; ignored at runtime
+const email = z.email({ errorMap: () => ({ message: "Bad email" }) })
+const age = z.number().min(18, { message: "Too young" }) // `message` is deprecated
 ```
 
 ## Correct
 
 ```typescript
-// GOOD: unified error parameter — string shorthand
-const name = z.string({ error: "Name is required" })
+// GOOD: a string
 const age = z.number().min(18, { error: "Must be 18 or older" })
+const ageShort = z.number().min(18, "Must be 18 or older")
 
-// GOOD: constraint shorthand (string as second arg)
-const age2 = z.number().min(18, "Must be 18 or older")
-
-// GOOD: function form for dynamic messages
-const name2 = z.string({
-  error: (issue) => {
-    if (issue.input === undefined) return "Name is required"
-    return "Name must be a string"
-  },
+// GOOD: a function, which replaces errorMap; it returns a string, or undefined to use the next error map
+const email = z.email({
+  error: (issue) => (issue.input === undefined ? "Email is required" : "Enter a valid email"),
 })
 ```
 
 ## Why
 
-The unified `error` parameter simplifies error customization. The string form covers most cases. The function form provides access to the issue context (`input`, `code`, `minimum`, etc.) for dynamic messages. Global error customization uses `z.config()` with an error map function.
+An error map in Zod 4 returns a plain string instead of `{ message }`. Precedence also changed: a schema-level error now wins over an error map passed to `.parse()` (zod.dev/v4/changelog). For a global map, use `z.config({ customError })`.

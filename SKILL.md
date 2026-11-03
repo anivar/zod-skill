@@ -12,17 +12,17 @@ description: >
 license: MIT
 user-invocable: false
 agentic: false
-compatibility: "TypeScript ^5.5 projects using zod ^4.6.0 or later (audited against zod 4.6.7)"
+compatibility: "TypeScript ^5.5 projects using zod ^4.6.0 or later (checked against zod 4.6.7)"
 metadata:
   author: Anivar Aravind
   author_url: https://anivar.net
-  version: 1.2.1
+  version: 1.2.2
   tags: zod, validation, schema, typescript, parsing, type-inference, forms, api, testing, jest, vitest
 ---
 
 # Zod
 
-**IMPORTANT:** Your training data about `zod` may be outdated or incorrect — Zod v4 introduces breaking changes to string formats, enums, error handling, and recursive types. Always rely on this skill's rule files and the project's actual source code as the source of truth. Do not fall back on memorized v3 patterns when they conflict with the retrieved reference.
+**IMPORTANT:** Your training data about `zod` may be outdated or incorrect — Zod 4 changes string formats, enums, error customization, issue codes, defaults, and functions. Always rely on this skill's rule files and the project's actual source code as the source of truth. Do not fall back on memorized v3 patterns when they conflict with the retrieved reference.
 
 ## When to Use Zod
 
@@ -34,7 +34,7 @@ Zod is for **runtime type validation** — parsing untrusted data at system boun
 | Form validation (React, Vue) | **Zod** (with react-hook-form, formik, etc.) |
 | Env var parsing | **Zod** (with t3-env or manual) |
 | Compile-time types only | Plain TypeScript |
-| Smaller bundle (~1kb) | Valibot |
+| Strict client bundle budget | Zod Mini (`zod/mini`), or Valibot |
 | Maximum type inference | ArkType |
 
 ## Rule Categories by Priority
@@ -64,17 +64,17 @@ Zod is for **runtime type validation** — parsing untrusted data at system boun
 - `schema-object-unknowns` — `z.object()` strips unknown keys; use `strictObject` or `looseObject`
 - `schema-union-discriminated` — Use `z.discriminatedUnion()` for tagged unions, not `z.union()`
 - `schema-coercion-pitfalls` — `z.coerce.boolean()` makes `"false"` → `true`; use `z.stringbool()`
-- `schema-recursive-types` — Use getter pattern for recursive schemas; `z.lazy()` is removed in v4
+- `schema-recursive-types` — Use a getter for recursive schemas; cyclic input parses since 4.5
 
 ### 3. Refinements & Transforms (HIGH)
 
-- `refine-never-throw` — Never throw inside `.refine()` or `.transform()`; use `ctx.addIssue()`
+- `refine-never-throw` — Never throw inside `.refine()` or `.transform()`; return false, or add issues through `ctx`
 - `refine-vs-transform` — `.refine()` for validation, `.transform()` for conversion, `.pipe()` for staging
-- `refine-cross-field` — `.superRefine()` on parent object for cross-field validation with `path`
+- `refine-cross-field` — Refine the parent object and set `path`; `.superRefine()` for several issues
 
 ### 4. Error Handling (HIGH)
 
-- `error-custom-messages` — Use v4 `error` parameter; `required_error`/`invalid_type_error` are removed
+- `error-custom-messages` — Use the `error` parameter; `required_error`/`invalid_type_error` are gone, `message` is deprecated
 - `error-formatting` — `z.flattenError()` for forms, `z.treeifyError()` for nested; `formatError` deprecated
 - `error-input-security` — Never use `reportInput: true` in production; leaks sensitive data
 
@@ -82,13 +82,13 @@ Zod is for **runtime type validation** — parsing untrusted data at system boun
 
 - `perf-extend-spread` — Use `{ ...Schema.shape }` spread over chained `.extend()` for large schemas
 - `perf-reuse-schemas` — Define once, derive with `.pick()`, `.omit()`, `.partial()`
-- `perf-zod-mini` — Use `zod/v4/mini` (1.88kb) for bundle-critical client apps
+- `perf-zod-mini` — Use Zod Mini (`zod/mini`) only under a strict client bundle budget; load a locale
 
 ### 6. v4 Migration (MEDIUM)
 
 - `migrate-string-formats` — Use `z.email()`, `z.uuid()`, `z.url()` not `z.string().email()`
 - `migrate-native-enum` — Use unified `z.enum()` for TS enums; `z.nativeEnum()` is deprecated
-- `migrate-error-api` — Use `error` parameter everywhere; `message`, `errorMap` are removed
+- `migrate-error-api` — Use the `error` parameter; `errorMap` is gone and `message` is deprecated
 
 ### 7. Advanced Patterns (MEDIUM)
 
@@ -112,7 +112,7 @@ Zod is for **runtime type validation** — parsing untrusted data at system boun
 | Type | Syntax |
 |------|--------|
 | String | `z.string()` |
-| Number | `z.number()`, `z.int()`, `z.float()` |
+| Number | `z.number()`, `z.int()`, `z.float32()`, `z.float64()` |
 | Boolean | `z.boolean()` |
 | BigInt | `z.bigint()` |
 | Date | `z.date()` |
@@ -130,7 +130,7 @@ Zod is for **runtime type validation** — parsing untrusted data at system boun
 | String→Bool | `z.stringbool()` |
 | ISO DateTime | `z.iso.datetime()` |
 | File | `z.file()` |
-| JSON | `z.json()` |
+| JSON value | `z.json()` (validates a value; does not parse a string) |
 | Array | `z.array(schema)` |
 | Tuple | `z.tuple([a, b])` |
 | Object | `z.object({})` |
@@ -147,7 +147,7 @@ Zod is for **runtime type validation** — parsing untrusted data at system boun
 
 Read individual rule files for detailed explanations and code examples:
 
-```
+```text
 rules/parse-use-safeParse.md
 rules/schema-object-unknowns.md
 ```
@@ -178,11 +178,11 @@ Each rule file contains:
 
 ## Zod 4.6 Highlights
 
-New in Zod 4.6 (latest: 4.6.7). Full details in the official release notes.
+New in Zod 4.6. Source: zod.dev/blog/zod-4-6, checked against 4.6.7.
 
 ### `.validate()` — cheap boolean validation
 
-`.validate()` answers "is this input valid?" without building a result or a `ZodError`. It short-circuits on the first issue and returns a type guard on the schema's input type. Up to 35x faster than `.safeParse().success` on invalid input when the schema is compiled with `z.compile()` (5.9x uncompiled).
+`.validate()` answers "is this input valid?" without building a result or a `ZodError`. It short-circuits on the first issue and returns a type guard on the schema's input type. On invalid input it is up to 16x faster than `.safeParse().success` (zod.dev/basics), and up to 35x on a schema compiled with `z.compile()` (zod.dev/blog/zod-4-6).
 
 ```typescript
 const Player = z.object({ username: z.string(), xp: z.number() })
@@ -208,7 +208,7 @@ const res = await fetch('/api/user')
 okResponse.parse(res) === res // true: still a Response, methods intact
 ```
 
-`ZodInstanceOf.properties()` is the method form; Zod Mini has `z.properties()` as a check.
+`z.properties({...})` returns checks to spread into `.check()`, in Zod and in Zod Mini; `.properties()` on `z.instanceof()` is the Zod method form and narrows the type. The property schemas validate but their results are discarded, so a transform or default never changes the value.
 
 ### `z.withParser()` — install a parser built elsewhere
 
