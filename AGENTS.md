@@ -3,7 +3,7 @@
 # Zod: compiled rules
 
 Every rule in `rules/`, expanded, for agents that read one file. Source: `SKILL.md` and `rules/*.md`.
-Baseline: zod ^4.6.0, checked against zod 4.6.7. Skill version 1.2.2.
+Baseline: zod ^4.6.0, checked against zod 4.6.7. Skill version 2.0.0.
 
 ## Abstract
 
@@ -166,6 +166,53 @@ const Player = z.toZod<Player>()(
   })
 )
 ```
+
+### Use .validate() When You Need Only a Boolean
+
+`parse-validate-boolean` · **MEDIUM** · Use .validate() for a yes or no, because it builds no error; use safeParse() when you need the parsed value.
+
+#### Problem
+
+`.safeParse(x).success` builds a full `ZodError` for each failure and then discards it. `.validate()` (Zod 4.6) returns a boolean, stops at the first failure and builds no error. It has a trap: it narrows the value to the schema's input type and returns no output, so after a transform, a default or a codec the narrowed value is the raw input.
+
+#### Incorrect
+
+```typescript
+const Item = z.object({ id: z.string(), price: z.number().nonnegative() })
+
+// Builds and discards a ZodError for every invalid item
+function validItems(items: unknown[]) {
+  return items.filter((item) => Item.safeParse(item).success)
+}
+
+const Port = z.string().regex(z.regexes.integer).transform(Number)
+
+function nextPort(raw: unknown) {
+  if (Port.validate(raw)) {
+    return raw + 1 // BUG: raw has the input type, string, so "8080" + 1 is "80801"
+  }
+  return undefined
+}
+```
+
+#### Correct
+
+```typescript
+function validItems(items: unknown[]) {
+  return items.filter((item) => Item.validate(item))
+}
+
+function nextPort(raw: unknown) {
+  const result = Port.safeParse(raw)
+  return result.success ? result.data + 1 : undefined
+}
+```
+
+#### Why
+
+The zod.dev basics page measures `.validate()` as up to 16x faster than `.safeParse().success` on invalid input, and the 4.6 release post measures up to 35x on a schema compiled with `z.compile()`. Use it for filters, guards and routing decisions. Use `.safeParse()` when you need the transformed value or the issues.
+
+On a schema with an async refinement, `.validate()` throws, as `.safeParse()` does; use `.validateAsync()`.
 
 ---
 
@@ -362,6 +409,57 @@ const Activity = z.object({
 The getter is the documented way to define recursive objects in Zod 4 (zod.dev/api, "Recursive objects"). The result is a plain `ZodObject`, so `.pick()`, `.omit()`, `.partial()` and `.extend()` keep working. Mutually recursive schemas (a `User` with `posts`, a `Post` with an `author`) use the same pattern.
 
 Since Zod 4.5, cyclic input parses: an object that contains itself comes back as an output graph with the same cycles. Zod Mini needs a memoizer registered for this (zod.dev/api). `z.lazy()` is not removed and not deprecated; `z.json()` is built on it.
+
+### Parse a JSON String with a Codec, Not z.json()
+
+`schema-json-string` · **HIGH** · z.json() checks a value that is already parsed and does not parse a string; decode JSON text with a codec that reports bad JSON as an issue.
+
+#### Problem
+
+`z.json()` checks that a value can be encoded as JSON. A string can be, so `z.json().parse('{"name":"Ada"}')` returns the same string. Code that gives JSON text to `z.json()` gets a string where it expects an object. `JSON.parse()` inside `.transform()` is no better: on bad text it throws a `SyntaxError`, and the error escapes `safeParse()`.
+
+#### Incorrect
+
+```typescript
+const Body = z.object({ name: z.string() })
+
+// BUG: the result is the string '{"name":"Ada"}', not an object
+const notParsed = z.json().parse('{"name":"Ada"}')
+
+// BUG: on "{bad", JSON.parse throws out of safeParse() instead of returning success: false
+const FromText = z.string().transform((s) => JSON.parse(s)).pipe(Body)
+```
+
+#### Correct
+
+```typescript
+const jsonCodec = <T extends z.core.$ZodType>(schema: T) =>
+  z.codec(z.string(), schema, {
+    decode: (text, ctx) => {
+      try {
+        return JSON.parse(text)
+      } catch (err) {
+        ctx.issues.push({
+          code: "invalid_format",
+          format: "json",
+          input: text,
+          message: err instanceof Error ? err.message : "Invalid JSON",
+        })
+        return z.NEVER
+      }
+    },
+    encode: (value) => JSON.stringify(value),
+  })
+
+const BodyFromText = jsonCodec(Body)
+BodyFromText.decode('{"name":"Ada"}')     // { name: "Ada" }
+BodyFromText.safeDecode("{bad").success  // false: an invalid_format issue with format "json"
+BodyFromText.encode({ name: "Ada" })      // '{"name":"Ada"}'
+```
+
+#### Why
+
+Use `z.json()` for a value that is already parsed, such as a JSON column or a field typed as arbitrary JSON. For JSON text, the codec turns bad text into an issue, validates the result with your schema, and encodes the value back. Zod does not export the codec; it is a recipe from zod.dev/codecs. See `references/codecs.md` for the other recipes.
 
 ---
 
@@ -828,6 +926,46 @@ Measured by the zod.dev Zod Mini page (gzip): `z.boolean().parse(true)` bundles 
 | Use when | Servers, scripts, most front ends | Client bundles with a strict size budget |
 
 A library that must accept both Zod and Zod Mini schemas builds against `zod/v4/core` (zod.dev/library-authors).
+
+### Compile the Final Schema, and Prove It Compiled
+
+`perf-compile` · **MEDIUM** · Pass the final schema to z.compile(); a derived schema is not compiled, and an unsupported schema falls back without an error.
+
+#### Problem
+
+`z.compile()` (Zod 4.5) makes valid input parse faster on a hot path. It can fail without a sign. A method called on a compiled schema, such as `.refine()` or `.optional()`, returns a new schema that is not compiled. An async check or a `.catch()` function anywhere in the schema makes `z.compile()` return the original schema, uncompiled. No error tells you.
+
+#### Incorrect
+
+```typescript
+// BUG: .refine() returns a new schema, and the new schema is not compiled
+const Order = z.compile(z.object({ id: z.string(), qty: z.int() })).refine((o) => o.qty > 0)
+
+// BUG: a .catch() function anywhere makes z.compile() return the original schema
+const Query = z.compile(z.object({ page: z.int().catch(() => 1) }))
+```
+
+#### Correct
+
+```typescript
+const OrderShape = z.object({ id: z.string(), qty: z.int() }).refine((o) => o.qty > 0)
+export const Order = z.compile(OrderShape)
+
+const QueryShape = z.object({ page: z.int().catch(1) }) // a constant .catch() compiles
+export const Query = z.compile(QueryShape)
+
+// A test fails when a schema stops compiling
+test("hot-path schemas compile", () => {
+  expect(() => z.compile(OrderShape, { strict: true })).not.toThrow()
+  expect(() => z.compile(QueryShape, { strict: true })).not.toThrow()
+})
+```
+
+#### Why
+
+A compiled schema returns the same data and the same issues as the original, so compiling is safe where it applies. `strict: true` throws `z.ZodCompileUnsupportedError` or `z.ZodCompileAsyncError` instead of falling back, which makes the fall-back visible in a test.
+
+On invalid input Zod runs the standard parser again to build the issues: failures do not get faster, and a refinement can run twice, so keep refinements free of side effects. Use `.validate()` when you need only a boolean. The compiler adds about 7 KB gzipped to a bundle that uses it. Under a strict Content Security Policy, `new Function` is blocked; install a parser generated at build time with `z.withParser()`. See `references/compile.md`.
 
 ---
 
@@ -1489,11 +1627,14 @@ Validation metrics close the feedback loop between schema design and real-world 
 
 The references are not expanded here. Read them from the skill folder:
 
-- `references/advanced-features.md`
 - `references/anti-patterns.md`
+- `references/behaviour-changes.md`
 - `references/boundary-architecture.md`
+- `references/codecs.md`
+- `references/compile.md`
 - `references/error-handling.md`
 - `references/linter-and-ci.md`
+- `references/metadata-and-json-schema.md`
 - `references/objects-and-composition.md`
 - `references/parsing-and-inference.md`
 - `references/refinements-and-transforms.md`

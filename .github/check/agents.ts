@@ -91,6 +91,24 @@ for (const src of texts) {
   }
 }
 
+// Each reference names its source and the Zod version on line 3, and no check date.
+for (const f of references) {
+  const third = read(`references/${f}`).split("\n")[2] ?? "";
+  if (!/^(Docs: .+ · Zod \d+\.\d+\.\d+$|Checked against Zod \d+\.\d+\.\d+)/.test(third))
+    problems.push(`references/${f}: line 3 must read "Docs: <pages> · Zod <version>" or "Checked against Zod <version>..."`);
+}
+
+// README.md states the rule count and lists every reference by file name.
+const readme = read("README.md");
+if (!readme.includes(`${files.length} Rules Across ${categories.length} Categories`)) problems.push(`README.md does not read "${files.length} Rules Across ${categories.length} Categories"`);
+if (!readme.includes(`${references.length} Deep-Dive References`)) problems.push(`README.md does not read "${references.length} Deep-Dive References"`);
+for (const f of references) if (!readme.includes(`\`${f}\``)) problems.push(`README.md does not list references/${f}`);
+for (const c of categories) {
+  const count = files.filter((id) => id.startsWith(`${c.prefix}-`)).length;
+  const row = new RegExp(`^\\|\\s*${c.priority}\\s*\\|[^|]*\\|\\s*(\\d+)\\s*\\|`, "m").exec(readme);
+  if (!row || Number(row[1]) !== count) problems.push(`README.md category ${c.priority} should count ${count} rules, reads ${row?.[1] ?? "nothing"}`);
+}
+
 // GitHub heading anchors: lowercase, drop punctuation, and turn each space into a hyphen without collapsing runs.
 const anchor = (s: string) => s.toLowerCase().replace(/[^\w\s-]/g, "").trim().replace(/ /g, "-");
 const sections: string[] = [];

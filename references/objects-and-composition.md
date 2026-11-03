@@ -130,6 +130,57 @@ const Config = z.object({ host: z.string() }).catchall(z.string())
 // Known keys validated by their schemas, unknown keys must be strings
 ```
 
+### Optional Keys: `.optional()`, `.exactOptional()`, `.nonoptional()`
+
+`.optional()` accepts a missing key and an explicit `undefined`. `.exactOptional()` accepts a missing key and rejects `undefined`, which matches JSON and `exactOptionalPropertyTypes`. `.nonoptional()` makes a field required again, for example after `.partial()`.
+
+```typescript
+const Profile = z.object({ nickname: z.string().exactOptional() })
+Profile.safeParse({}).success                      // true
+Profile.safeParse({ nickname: undefined }).success // false
+
+const Patch = User.partial()
+const PatchWithName = Patch.extend({ name: Patch.shape.name.nonoptional() })
+```
+
+### Symbol Keys
+
+A shape can declare a symbol key (Zod 4.5). A `const` symbol infers as `unique symbol`, so the key is required in the inferred type. Undeclared symbol keys are ignored.
+
+```typescript
+const TAG = Symbol("tag")
+const Tagged = z.object({ name: z.string(), [TAG]: z.number() })
+Tagged.safeParse({ name: "alice", [TAG]: 42 }).success // true
+Tagged.safeParse({ name: "alice" }).success            // false
+```
+
+### .readonly()
+
+The output type becomes `Readonly<T>`, and the parsed value is frozen with `Object.freeze()`.
+
+```typescript
+const Config = z.object({ host: z.string(), port: z.number() }).readonly()
+
+type Config = z.infer<typeof Config>
+// Readonly<{ host: string; port: number }>
+```
+
+### Validate Properties in Place: `.properties()`
+
+`z.object()` returns a new plain object. `.properties()` on `z.instanceof()` (Zod 4.6) checks some properties of the input and returns the input itself, so a class instance keeps its prototype and methods.
+
+```typescript
+const OkResponse = z.instanceof(Response).properties({
+  ok: z.literal(true),
+  status: z.number().min(200).max(299),
+})
+
+const res = await fetch("/api/user")
+OkResponse.parse(res) === res // true: still a Response
+```
+
+`z.properties({ ... })` returns checks to pass to `.check()`, in Zod and in Zod Mini. The property schemas validate, but their results are discarded, so a transform or default does not change the value.
+
 ## Recursive Objects
 
 Use a getter. `z.lazy()` still works, but the getter keeps object methods and infers the type. Since Zod 4.5, cyclic input parses too.

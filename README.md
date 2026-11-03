@@ -10,7 +10,7 @@ AI agents often generate outdated Zod v3 patterns — `z.string().email()` inste
 
 ## This Solution
 
-27 rules with incorrect→correct code examples that teach agents Zod v4's actual API behavior, schema design patterns, error handling, architectural placement, observability, and TypeScript integration. Each rule targets a specific mistake and shows exactly how to fix it.
+30 rules with incorrect→correct code examples that teach agents Zod v4's actual API behavior, schema design patterns, error handling, architectural placement, observability, and TypeScript integration. Each rule targets a specific mistake and shows exactly how to fix it.
 
 ## Install
 
@@ -19,7 +19,8 @@ npx skills add anivar/zod-skill -g
 ```
 
 Testing schemas is covered too, in `references/testing.md`. The
-[zod-testing](https://github.com/anivar/zod-testing) skill carries the same guide.
+[zod-testing](https://github.com/anivar/zod-testing) skill carries the same guide,
+generated from these files by `.github/check/sync-testing.ts`.
 
 Or with full URL:
 
@@ -43,15 +44,15 @@ and every behaviour claim with a runtime test runs on zod 4.6.7. Run the check w
 
 ## What's Inside
 
-### 27 Rules Across 9 Categories
+### 30 Rules Across 9 Categories
 
 | Priority | Category | Rules | Impact |
 |----------|----------|-------|--------|
-| 1 | Parsing & Type Safety | 3 | CRITICAL |
-| 2 | Schema Design | 4 | CRITICAL |
+| 1 | Parsing & Type Safety | 4 | CRITICAL |
+| 2 | Schema Design | 5 | CRITICAL |
 | 3 | Refinements & Transforms | 3 | HIGH |
 | 4 | Error Handling | 3 | HIGH |
-| 5 | Performance & Composition | 3 | MEDIUM |
+| 5 | Performance & Composition | 4 | MEDIUM |
 | 6 | v4 Migration | 3 | MEDIUM |
 | 7 | Advanced Patterns | 3 | MEDIUM |
 | 8 | Architecture & Boundaries | 3 | CRITICAL/HIGH |
@@ -63,16 +64,19 @@ Each rule file contains:
 - Correct code with explanation
 - Decision tables and additional context
 
-### 12 Deep-Dive References
+### 15 Deep-Dive References
 
 | Reference | Covers |
 |-----------|--------|
-| `schema-types.md` | All primitives, string formats, numbers, enums, dates, files, JSON |
-| `parsing-and-inference.md` | parse, safeParse, parseAsync, z.infer, z.input, coercion |
-| `objects-and-composition.md` | object/strict/loose, pick, omit, partial, recursive, unions, tuples |
+| `schema-types.md` | Primitives, string formats, numbers, enums, dates, files, JSON, functions, branded types |
+| `parsing-and-inference.md` | parse, safeParse, validate, z.infer, z.input, coercion, Standard Schema |
+| `objects-and-composition.md` | object/strict/loose, optional keys, pick, omit, partial, recursive, unions, tuples, properties |
 | `refinements-and-transforms.md` | refine, superRefine, transform, pipe, defaults, catch |
 | `error-handling.md` | ZodError, flattenError, treeifyError, error customization, i18n |
-| `advanced-features.md` | Codecs, branded types, JSON Schema, registries, Standard Schema |
+| `behaviour-changes.md` | What parses differently in 4.0, 4.4, 4.5 and 4.6, each row tested |
+| `codecs.md` | z.codec, decode and encode, each direction, 16 copy-in recipes |
+| `metadata-and-json-schema.md` | Registries, .meta(), z.toJSONSchema options, z.fromJSONSchema |
+| `compile.md` | z.compile, zod/compile, what does not compile, z.withParser, bundle cost |
 | `anti-patterns.md` | 15 common mistakes with BAD/GOOD examples |
 | `boundary-architecture.md` | Where Zod fits: Express, tRPC, Next.js, React Hook Form, env, external APIs |
 | `linter-and-ci.md` | ESLint rules, CI schema snapshots, unused schema detection, circular deps |
@@ -102,7 +106,10 @@ Each rule file contains:
     ├── objects-and-composition.md
     ├── refinements-and-transforms.md
     ├── error-handling.md
-    ├── advanced-features.md
+    ├── behaviour-changes.md
+    ├── codecs.md
+    ├── metadata-and-json-schema.md
+    ├── compile.md
     ├── anti-patterns.md
     ├── boundary-architecture.md
     ├── linter-and-ci.md

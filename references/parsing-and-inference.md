@@ -168,3 +168,17 @@ schema.safeParse(data, {
   reportInput: process.env.NODE_ENV === "development",
 })
 ```
+
+## Standard Schema
+
+Zod schemas implement Standard Schema, so a library that accepts a `StandardSchemaV1` accepts a Zod schema without an adapter.
+
+```typescript
+import type { StandardSchemaV1 } from "@standard-schema/spec"
+
+function check(schema: StandardSchemaV1, value: unknown) {
+  return schema["~standard"].validate(value)
+}
+
+check(z.object({ name: z.string() }), { name: "Ada" })
+```

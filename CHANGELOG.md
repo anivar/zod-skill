@@ -4,6 +4,69 @@ Notable changes to this skill. The version that matters most in each entry is
 the *upstream* one: a skill about a moving library is only as good as the
 release it was last checked against.
 
+## [2.0.0] — 2026-11-03
+
+A major version: `references/advanced-features.md` is removed, so a link to it breaks. The
+references follow the zod.dev pages instead of the releases. Checked against zod 4.6.7.
+
+### Changed
+
+- **`references/advanced-features.md` is removed.** Its sections moved: codecs to
+  `codecs.md`; registries and JSON Schema to `metadata-and-json-schema.md`; functions,
+  `z.instanceof()` and branded types to `schema-types.md`; `.readonly()` and the optional-key
+  methods to `objects-and-composition.md`; Standard Schema to `parsing-and-inference.md`.
+  A link to the old path breaks.
+- **The "Zod 4.6 Highlights" section of `SKILL.md` is removed.** `.validate()` is in
+  `parsing-and-inference.md` and its own rule; `z.properties()` is in
+  `objects-and-composition.md`; `z.withParser()` is in `compile.md`; the `fromJSONSchema()`
+  keywords are in `metadata-and-json-schema.md`; the lazy error maps and `z.emoji()` are in
+  `behaviour-changes.md`.
+- Every reference names its docs pages and Zod version on line 3. The skill text carries no
+  check dates; the CHANGELOG headings date each release.
+
+### Added
+
+- `references/behaviour-changes.md`: what parses differently in 4.0, 4.4, 4.5 and 4.6. Each
+  row names its test, or says "Type-level" or "Not run".
+- `references/codecs.md`: each direction of a codec, `z.input()`/`z.output()`, and the 16
+  recipes from zod.dev/codecs. The check runs the recipe block as written.
+- `references/metadata-and-json-schema.md` and `references/compile.md`.
+- Rule `perf-compile`: compile the final schema, and prove it compiled with `strict: true`.
+- Rule `parse-validate-boolean`: `.validate()` for a yes or no; it narrows to the input type,
+  and the check measures that trap (N1).
+- Rule `schema-json-string`: `z.json()` does not parse a string; decode JSON text with a
+  codec. The skill taught the opposite before 1.2.2 (F1).
+- `z.stringFormat()`, symbol keys, `z.instanceof().properties()`, `.exactOptional()` and
+  `.nonoptional()`, `z.ZodCompileAsyncError` and `z.ZodCompileUnsupportedError`.
+- The check: claims for every new behaviour (B, C, K, M, N ids), guards against a
+  release-specific section and against dates in the skill text, and README counts and
+  reference headers in `agents.ts`.
+- `.github/check/sync-testing.ts` generates the zod-testing guide from
+  `references/testing.md`, `testing-api.md` and `testing-anti-patterns.md`, and with
+  `--check` fails when either copy changed alone.
+- `references/testing.md`: assert error messages under one configuration, because error
+  maps run on the first read of `result.error` since 4.6.
+
+### Measured against the docs
+
+On 4.6.7, three statements on zod.dev do not hold. The skill states both and follows the
+measurement:
+
+- The metadata page says a registry throws on a duplicate `id`. `.add()` and `.meta()`
+  accept it; one `z.toJSONSchema()` conversion that meets both schemas throws.
+- The metadata page says `.refine()` drops metadata. `.refine()` and checks keep it;
+  `.optional()` and `.transform()` drop it.
+- The compile page says a union with an unsupported member makes the whole schema fall
+  back. A union with a `z.coerce` member inside an object still compiles under
+  `strict: true`.
+
+### zod-testing 1.2.0 (sibling repo)
+
+Its guide is now generated from this skill's testing references, and a workflow there
+fails when the copies differ. This drops two wrong statements that only its copy carried:
+that Zod 4 removes `z.nativeEnum()` (it is deprecated, P3) and a 5.9x `.validate()` figure
+(S16).
+
 ## [1.2.2] — 2026-11-03
 
 Checked against zod 4.6.7 and these zod.dev pages (api, basics,
