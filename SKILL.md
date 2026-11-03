@@ -16,7 +16,7 @@ compatibility: "TypeScript ^5.5 projects using zod ^4.6.0 or later (audited agai
 metadata:
   author: Anivar Aravind
   author_url: https://anivar.net
-  version: 1.2.0
+  version: 1.2.1
   tags: zod, validation, schema, typescript, parsing, type-inference, forms, api, testing, jest, vitest
 ---
 

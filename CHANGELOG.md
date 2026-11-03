@@ -4,6 +4,56 @@ Notable changes to this skill. The version that matters most in each entry is
 the *upstream* one: a skill about a moving library is only as good as the
 release it was last checked against.
 
+## [1.2.1] — 2026-11-03
+
+Audited the testing references against zod-schema-faker 3.0.1, @faker-js/faker 10.6.0,
+fast-check 4.10.2 and @anatine/zod-mock 3.14.0, with Zod at 4.6.7.
+
+### Corrected
+
+- **Every zod-schema-faker example imported the Zod 3 entry.** The package root is the
+  library's Zod 3 entry and throws `Unsupported schema type` on a Zod 4 schema, so the
+  mock-data examples failed on the skill's own baseline. They now import
+  `zod-schema-faker/v4` and call `setFaker(faker)` once.
+- **`@anatine/zod-mock` does not support Zod 4.** Its latest release declares
+  `zod ^3.21.4`, and `generateMock()` returns `undefined` for a Zod 4 schema. The example
+  is replaced by that warning.
+- **The property example generated nothing.** `fc.property(fc.constant(null), ...)`
+  reports `[null]` as its counterexample and cannot replay the data that failed. It is
+  replaced by properties built from fast-check arbitraries, which shrink, and a seeded
+  faker for "the schema accepts its own data", which replays.
+- **The transform example passed silently** when a generated input did not parse.
+
+Executed under bun 1.4.4: every replacement example, taken from these files, passes
+(34 tests across both repos). Five planted bugs in the order total, the age bound and
+an unfakeable refine each fail a property; the arbitrary-built ones shrink to small
+cases (`qty: 3`, `qty: 11`, `age: 151`).
+
+### Added
+
+- Anti-pattern: a property over a constant.
+
+### zod-testing 1.1.1 (sibling repo)
+
+The same corrections.
+
+## [1.2.0] — 2026-10-18
+
+Updated for **Zod 4.6** (audited against 4.6.7). Baseline raised from `^4.3.0` to `^4.6.0` in `SKILL.md`, `AGENTS.md` and `README.md`; `metadata.version` is now 1.2.0.
+
+### Added
+
+- **`.validate()` guidance**: boolean-only validation as a type guard, with the short-circuit and performance semantics (up to 35x faster than `.safeParse().success` on invalid input compiled with `z.compile()`).
+- **`z.properties()`**: in-place property validation that preserves class instances and prototypes, contrasting with `z.object()`'s plain-object return.
+- **`z.withParser()`**: build-time parser installation for CSP-strict environments where `new Function` is blocked.
+- **`z.iban()`** and the six new `fromJSONSchema()` keywords (`minProperties`/`maxProperties`, `uniqueItems`, `contains`/`minContains`/`maxContains`).
+- **Lazy error-map timing**: error maps now evaluate on first read of `result.error`; `z.config()` changes between parse and read apply the newer value.
+- **`z.emoji()` requires a pictograph**, plus the standalone `@zod/mini` package, faster CommonJS, and the recursive-schema memory fix.
+
+### zod-testing 1.1.0 (sibling repo)
+
+`zod-testing` gains a "Zod 4.6 in Tests" section: `.validate()` as the cheap boolean assertion (vs `.safeParse().success`), `z.compile()` for hot suites, and the lazy error-map gotcha for locale assertions.
+
 ## [1.1.0] — 2026-08-08
 
 Audited against [zod.dev](https://zod.dev)'s documentation — the full text, not
@@ -46,20 +96,3 @@ later, they belong here then.
 ## [1.0.0]
 
 Initial release: 27 rules across 9 categories, 9 references, compiled AGENTS.md.
-
-## 1.2.0
-
-Updated for **Zod 4.6** (audited against 4.6.7). Baseline raised from `^4.3.0` to `^4.6.0` in `SKILL.md`, `AGENTS.md` and `README.md`; `metadata.version` is now 1.2.0.
-
-### Added
-
-- **`.validate()` guidance**: boolean-only validation as a type guard, with the short-circuit and performance semantics (up to 35x faster than `.safeParse().success` on invalid input compiled with `z.compile()`).
-- **`z.properties()`**: in-place property validation that preserves class instances and prototypes, contrasting with `z.object()`'s plain-object return.
-- **`z.withParser()`**: build-time parser installation for CSP-strict environments where `new Function` is blocked.
-- **`z.iban()`** and the six new `fromJSONSchema()` keywords (`minProperties`/`maxProperties`, `uniqueItems`, `contains`/`minContains`/`maxContains`).
-- **Lazy error-map timing**: error maps now evaluate on first read of `result.error`; `z.config()` changes between parse and read apply the newer value.
-- **`z.emoji()` requires a pictograph**, plus the standalone `@zod/mini` package, faster CommonJS, and the recursive-schema memory fix.
-
-### zod-testing 1.1.0 (sibling repo)
-
-`zod-testing` gains a "Zod 4.6 in Tests" section: `.validate()` as the cheap boolean assertion (vs `.safeParse().success`), `z.compile()` for hot suites, and the lazy error-map gotcha for locale assertions.
