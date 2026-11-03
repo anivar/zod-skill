@@ -355,3 +355,423 @@ describe("R: findings after the audit", () => {
   guard("R13", "no top-level bench import from vitest", /import \{[^}]*\bbench\b[^}]*\} from "vitest"/, "code");
   guard("R14", "no claim that a toThrow() test passes when nothing throws", /(still "?passes"?|no throw means no assertion)/);
 });
+
+describe("B: behaviour changes by release (references/behaviour-changes.md)", () => {
+  test("B1 z.uuid() checks the variant bits; z.guid() does not", () => {
+    const v = "00000000-0000-0000-c000-000000000000";
+    expect([z.uuid().safeParse(v).success, z.guid().safeParse(v).success]).toEqual([false, true]);
+  });
+  test("B2 z.base64url() rejects padding", () => {
+    expect([z.base64url().safeParse("SGVsbG8=").success, z.base64url().safeParse("SGVsbG8").success]).toEqual([false, true]);
+  });
+  test("B3 a missing key with a z.coerce schema fails", () => {
+    const issue = z.object({ foo: z.coerce.boolean() }).safeParse({}).error?.issues[0];
+    expect(issue).toMatchObject({ code: "invalid_type", expected: "nonoptional", path: ["foo"] });
+  });
+  test("B4 defaults apply inside optional fields", () => {
+    expect(z.object({ a: z.string().default("tuna").optional() }).parse({})).toEqual({ a: "tuna" });
+  });
+  test("B5 an enum-keyed record requires every key; partialRecord does not", () => {
+    expect(z.record(z.enum(["a", "b"]), z.number()).safeParse({ a: 1 }).success).toBe(false);
+    expect(z.partialRecord(z.enum(["a", "b"]), z.number()).safeParse({ a: 1 }).success).toBe(true);
+  });
+  test("B6 an unmergeable intersection throws a plain Error", () => {
+    let caught: unknown;
+    try {
+      z.intersection(z.string().transform((s) => `${s}1`), z.string()).parse("a");
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught instanceof Error && !(caught instanceof z.ZodError)).toBe(true);
+    expect((caught as Error).message).toMatch(/^Unmergable intersection/);
+  });
+  test("B7 z.unknown(), z.any() and z.undefined() keys are required", () => {
+    for (const s of [z.unknown(), z.any(), z.undefined()]) {
+      expect(z.object({ a: s }).safeParse({}).success).toBe(false);
+      expect(z.object({ a: s }).safeParse({ a: undefined }).success).toBe(true);
+    }
+  });
+  test("B8 tuple defaults appear in the output", () => {
+    expect(z.tuple([z.string(), z.string().default("fallback")]).parse(["a"])).toEqual(["a", "fallback"]);
+    expect(z.tuple([z.string(), z.string().optional()]).parse(["a"])).toEqual(["a"]);
+  });
+  test("B9 .merge() throws when the receiver has refinements", () => {
+    const refined = z.object({ a: z.string() }).refine((v) => v.a.length > 0);
+    expect(() => refined.merge(z.object({ b: z.string() }))).toThrow(/Use \.safeExtend\(\) instead/); // deprecated: proves the 4.4 throw
+  });
+  test("B10 z.base64() rejects whitespace", () => {
+    expect([z.base64().safeParse("Zm9v").success, z.base64().safeParse("Zm 9v").success]).toEqual([true, false]);
+  });
+  test("B11 z.httpUrl() rejects a protocol with one slash", () => {
+    expect([z.httpUrl().safeParse("https://example.com").success, z.httpUrl().safeParse("https:/example.com").success]).toEqual([true, false]);
+  });
+  test("B12 a discriminated union error names the expected values", () => {
+    const D = z.discriminatedUnion("type", [z.object({ type: z.literal("circle") }), z.object({ type: z.literal("square") })]);
+    const issue = D.safeParse({ type: "tri" }).error?.issues[0];
+    expect(issue?.message).toBe("Invalid discriminator value. Expected 'circle' | 'square'");
+    expect(issue).toMatchObject({ options: ["circle", "square"], path: ["type"] });
+  });
+  test("B13 treeifyError keeps the paths of issues inside a union", () => {
+    const U = z.object({ v: z.union([z.object({ k: z.string() }), z.object({ k: z.number(), j: z.string() })]) });
+    const err = U.safeParse({ v: { k: true } }).error;
+    const tree = err && z.treeifyError(err);
+    expect(Object.keys(tree?.properties?.v?.properties ?? {}).sort()).toEqual(["j", "k"]);
+  });
+  test("B14 $defs entries carry no id", () => {
+    const reg = z.registry<{ id: string }>();
+    const Inner = z.object({ a: z.string() }).register(reg, { id: "Inner" });
+    const out = z.toJSONSchema(z.object({ x: Inner, y: Inner }), { metadata: reg }) as { $defs?: Record<string, object> };
+    expect(out.$defs?.Inner).toBeDefined();
+    expect(out.$defs?.Inner).not.toHaveProperty("id");
+  });
+  test("B15 z.iso.datetime() requires seconds; local: true and precision: -1 accept minutes", () => {
+    expect(z.iso.datetime().safeParse("2020-01-01T06:15Z").success).toBe(false);
+    expect(z.iso.datetime({ local: true }).safeParse("2020-01-01T06:15").success).toBe(true);
+    expect(z.union([z.iso.datetime(), z.iso.datetime({ precision: -1 })]).safeParse("2020-01-01T06:15Z").success).toBe(true);
+  });
+  test("B16 string length counts code points", () => {
+    expect(z.string().max(5).safeParse("😀😀😀😀😀").success).toBe(true);
+    expect(z.string().min(5).safeParse("😀😀😀").success).toBe(false);
+  });
+  test("B17 a record key schema applies only to matching keys", () => {
+    const S = z.object({ name: z.string() }).and(z.record(z.string().regex(/^S_/), z.string()));
+    expect(S.parse({ name: "a", S_a: "s" })).toEqual({ name: "a", S_a: "s" });
+  });
+  test("B18 unrecognized_keys does not stop the other checks", () => {
+    const codes = z.strictObject({ a: z.string() }).safeParse({ a: 1, x: 2 }).error?.issues.map((i) => i.code);
+    expect(codes).toEqual(["invalid_type", "unrecognized_keys"]);
+  });
+  test("B19 __proto__ is stripped; a strict object reports it", () => {
+    const out = z.object({ a: z.string() }).parse(JSON.parse('{"a":"x","__proto__":{"polluted":1}}'));
+    expect(Object.keys(out)).toEqual(["a"]);
+    expect(Object.getPrototypeOf(out)).toBe(Object.prototype);
+    expect((out as Record<string, unknown>).polluted).toBeUndefined();
+    const codes = z.strictObject({ a: z.string() }).safeParse(JSON.parse('{"a":"x","__proto__":{}}')).error?.issues.map((i) => i.code);
+    expect(codes).toEqual(["unrecognized_keys"]);
+  });
+  test("B20 z.ipv6() and z.ulid() are stricter", () => {
+    expect([z.ipv6().safeParse("::1").success, z.ipv6().safeParse("::1\n").success]).toEqual([true, false]);
+    expect([z.ulid().safeParse("01ARZ3NDEKTSV4RRFFQ69G5FAV").success, z.ulid().safeParse("81ARZ3NDEKTSV4RRFFQ69G5FAV").success]).toEqual([true, false]);
+  });
+  test("B21 error maps run on the first read of result.error; parse() is unchanged", () => {
+    try {
+      const result = z.string().safeParse(12);
+      z.config(z.locales.fr());
+      expect(result.error?.issues[0]?.message).toMatch(/^Entrée invalide/);
+      z.config(z.locales.en());
+      let thrown: unknown;
+      try {
+        z.string().parse(12);
+      } catch (e) {
+        thrown = e;
+      }
+      z.config(z.locales.fr());
+      expect((thrown as z.ZodError).issues[0]?.message).toBe("Invalid input: expected string, received number");
+    } finally {
+      z.config(z.locales.en());
+    }
+  });
+  test("B22 z.emoji() needs a pictograph", () => {
+    expect([z.emoji().safeParse("😀").success, z.emoji().safeParse("123").success]).toEqual([true, false]);
+  });
+  test("B23 numeric enum .options lists only the values", () => {
+    enum Country { UK, Germany, France }
+    expect(z.enum(Country).options).toEqual([0, 1, 2]);
+  });
+  test("B24 toJSONSchema combines chained checks", () => {
+    expect(z.toJSONSchema(z.number().min(0).max(23).int())).toMatchObject({ type: "integer", minimum: 0, maximum: 23 });
+  });
+  test("B25 bound getters read the combined checks", () => {
+    expect(z.string().min(8).length(5).minLength).toBe(8);
+  });
+  test("B26 an email in a template literal does not check the text after it", () => {
+    expect(z.templateLiteral([z.email(), "|", z.string()]).safeParse("a@b.cc|a..b").success).toBe(true);
+  });
+  test("B every row of behaviour-changes.md names a test that exists, or says Type-level or Not run", () => {
+    const file = docs.find((d) => d.file === "references/behaviour-changes.md");
+    expect(file).toBeDefined();
+    const names = readFileSync(import.meta.path, "utf8");
+    const rows = (file?.text ?? "").split("\n").filter((l) => /^\| (?!Change|---)/.test(l));
+    expect(rows.length).toBeGreaterThan(30);
+    const bad = rows
+      .map((l) => l.split(/(?<!\\)\|/).map((c) => c.trim()).filter(Boolean).at(-1) ?? "")
+      .filter((id) => !(id === "Type-level" || id === "Not run" || new RegExp(`test\\("${id} `).test(names)));
+    expect(bad).toEqual([]);
+  });
+});
+
+describe("C: compile (references/compile.md, rules/perf-compile.md)", () => {
+  const Player = z.object({ username: z.string(), bio: z.string(), xp: z.number() });
+  test("C1 z.compile() returns a new schema with the same results", () => {
+    const C = z.compile(Player);
+    expect(C).not.toBe(Player);
+    expect(C.parse({ username: "a", bio: "b", xp: 1, extra: 2 })).toEqual(Player.parse({ username: "a", bio: "b", xp: 1, extra: 2 }));
+    const bad = { username: 1, bio: 2, xp: "x" };
+    expect(C.safeParse(bad).error?.issues).toEqual(Player.safeParse(bad).error?.issues);
+    expect([C.validate({ username: "a", bio: "b", xp: 1 }), C.validate(bad)]).toEqual([true, false]);
+  });
+  test("C2 an async check or a .catch() function returns the original schema; strict throws", () => {
+    const A = z.string().refine(async () => true);
+    expect(z.compile(A)).toBe(A);
+    expect(() => z.compile(A, { strict: true })).toThrow(z.ZodCompileAsyncError);
+    const Q = z.object({ page: z.int().catch(() => 1) });
+    expect(z.compile(Q)).toBe(Q);
+    expect(() => z.compile(Q, { strict: true })).toThrow(z.ZodCompileUnsupportedError);
+    expect(() => z.compile(z.xor([z.string(), z.number()]), { strict: true })).toThrow(z.ZodCompileUnsupportedError);
+  });
+  test("C3 a z.coerce child inside an object compiles around itself", () => {
+    const Q = z.object({ page: z.coerce.number() });
+    expect(z.compile(Q)).not.toBe(Q);
+    expect(() => z.compile(Q, { strict: true })).not.toThrow();
+    const bare = z.coerce.number();
+    expect(z.compile(bare)).toBe(bare);
+  });
+  test("C4 the perf-compile Correct schemas compile under strict", () => {
+    const OrderShape = z.object({ id: z.string(), qty: z.int() }).refine((o) => o.qty > 0);
+    const QueryShape = z.object({ page: z.int().catch(1) });
+    expect(() => z.compile(OrderShape, { strict: true })).not.toThrow();
+    expect(() => z.compile(QueryShape, { strict: true })).not.toThrow();
+    expect(() => z.compile(Player, { strict: true })).not.toThrow();
+  });
+  test("C5 z.withParser() installs a parser; z.INVALID hands the input to the runtime", () => {
+    const Fast = z.withParser(Player, (input) => {
+      const v = input as { username?: unknown; bio?: unknown; xp?: unknown } | null;
+      return typeof v?.username === "string" && typeof v.bio === "string" && typeof v.xp === "number"
+        ? { username: v.username, bio: v.bio, xp: v.xp }
+        : z.INVALID;
+    });
+    expect(Fast.parse({ username: "a", bio: "b", xp: 1, x: 3 })).toEqual({ username: "a", bio: "b", xp: 1 });
+    expect(Fast.safeParse({ username: 1 }).error?.issues[0]?.code).toBe("invalid_type");
+  });
+  test("C7 on 4.6.7 a union with a z.coerce member inside an object still compiles", () => {
+    const U = z.object({ id: z.union([z.string(), z.coerce.number()]) });
+    expect(z.compile(U)).not.toBe(U);
+    expect(() => z.compile(U, { strict: true })).not.toThrow();
+  });
+  test("C6 zod/compile resolves", () => {
+    expect(Bun.resolveSync("zod/compile", import.meta.dir)).toMatch(/zod\/compile\.js$/);
+  });
+});
+
+describe("K: codecs (references/codecs.md)", () => {
+  const isoDatetimeToDate = z.codec(z.iso.datetime(), z.date(), {
+    decode: (s) => new Date(s),
+    encode: (d) => d.toISOString(),
+  });
+  test("K1 defaults and .catch() apply only when decoding", () => {
+    expect(z.string().default("hello").decode(undefined)).toBe("hello");
+    expect(z.string().default("hello").safeEncode(undefined as never).success).toBe(false);
+    expect(z.string().catch("hello").decode(1234 as never)).toBe("hello");
+    expect(z.string().catch("hello").safeEncode(1234 as never).success).toBe(false);
+  });
+  test("K2 refinements run when encoding; stringbool encodes to the first value", () => {
+    const after2000 = isoDatetimeToDate.refine((d) => d.getFullYear() >= 2000, "Must be this millennium");
+    expect(after2000.safeEncode(new Date("1999-01-01")).error?.issues[0]?.message).toBe("Must be this millennium");
+    expect(z.string().trim().encode("  hello  ")).toBe("hello");
+    expect([z.stringbool().encode(true), z.stringbool({ truthy: ["yes", "y"], falsy: ["no", "n"] }).encode(false)]).toEqual(["true", "no"]);
+  });
+  test("K3 invertCodec swaps the directions", () => {
+    const inverted = z.invertCodec(isoDatetimeToDate);
+    expect(inverted.decode(new Date("2024-01-15T10:30:00.000Z"))).toBe("2024-01-15T10:30:00.000Z");
+    expect(inverted.encode("2024-01-15T10:30:00.000Z")).toBeInstanceOf(Date);
+  });
+  test("K4 z.input() and z.output() project one side", () => {
+    const Event = z.object({ name: z.string(), at: isoDatetimeToDate });
+    expect(z.input(Event).safeParse({ name: "l", at: "2024-01-01T00:00:00Z" }).success).toBe(true);
+    expect(z.output(Event).safeParse({ name: "l", at: new Date() }).success).toBe(true);
+    expect(z.input(Event).safeParse({ name: "l", at: new Date() }).success).toBe(false);
+  });
+  test("K5 the top-level codec functions exist", () => {
+    for (const f of ["decode", "encode", "safeDecode", "safeEncode", "decodeAsync", "encodeAsync", "safeDecodeAsync", "safeEncodeAsync"])
+      expect(typeof (z as unknown as Record<string, unknown>)[f]).toBe("function");
+  });
+
+  // Runs the Recipes block of references/codecs.md as written, and checks it against the examples on zod.dev/codecs.
+  const recipes = (() => {
+    const file = "references/codecs.md";
+    const text = docs.find((d) => d.file === file)?.text ?? "";
+    const at = text.indexOf("\n## Recipes\n");
+    const open = text.indexOf("```typescript\n", at);
+    const close = text.indexOf("\n```", open + 14);
+    if (at < 0 || open < 0 || close < 0) throw new Error(`${file}: no Recipes block`);
+    const source = text.slice(open + 14, close);
+    const line = text.slice(0, open).split("\n").length + 1;
+    const names = [...source.matchAll(/^const (\w+) =/gm)].map((m) => m[1]);
+    try {
+      const js = new Bun.Transpiler({ loader: "ts" }).transformSync(source);
+      return new Function("z", `${js}\nreturn { ${names.join(", ")} };`)(z) as Record<string, z.ZodType & { decode(v: unknown): unknown; encode(v: unknown): unknown; safeDecode(v: unknown): { success: boolean } }> & {
+        jsonCodec: (s: z.ZodType) => z.ZodType & { decode(v: unknown): unknown; encode(v: unknown): unknown; safeDecode(v: unknown): { success: boolean; error?: z.ZodError } };
+      };
+    } catch (e) {
+      throw new Error(`${file}:${line}: the Recipes block does not run: ${(e as Error).message}`);
+    }
+  })();
+  const bytes = (u: unknown) => [...(u as Uint8Array)];
+  test("K6 the docs list 16 recipes; the block defines the 15 that the first example does not", () => {
+    expect(Object.keys(recipes).length).toBe(15);
+  });
+  test("K7 number and integer recipes", () => {
+    expect(recipes.stringToNumber.decode("42.5")).toBe(42.5);
+    expect(recipes.stringToNumber.encode(42.5)).toBe("42.5");
+    expect(recipes.stringToInt.decode("42")).toBe(42);
+    expect(recipes.stringToInt.safeDecode("12abc").success).toBe(false);
+    expect(recipes.stringToBigInt.decode("12345")).toBe(12345n);
+    expect(recipes.numberToBigInt.decode(42)).toBe(42n);
+    expect(recipes.numberToBigInt.encode(42n)).toBe(42);
+  });
+  test("K8 date recipes", () => {
+    expect((recipes.epochSecondsToDate.decode(1705314600) as Date).toISOString()).toBe("2024-01-15T10:30:00.000Z");
+    expect(recipes.epochSecondsToDate.encode(new Date("2024-01-15T10:30:00.000Z"))).toBe(1705314600);
+    expect(recipes.epochMillisToDate.encode(new Date(1705314600000))).toBe(1705314600000);
+    expect(isoDatetimeToDate.encode(new Date("2024-01-15"))).toBe("2024-01-15T00:00:00.000Z");
+  });
+  test("K9 jsonCodec decodes, rejects bad JSON as an issue, and encodes", () => {
+    const J = recipes.jsonCodec(z.object({ name: z.string(), age: z.number() }));
+    expect(J.decode('{"name":"Alice","age":30}')).toEqual({ name: "Alice", age: 30 });
+    expect(J.encode({ name: "Bob", age: 25 })).toBe('{"name":"Bob","age":25}');
+    const bad = J.safeDecode("~~invalid~~");
+    expect(bad.success).toBe(false);
+    expect(bad.error?.issues[0]).toMatchObject({ code: "invalid_format", format: "json", path: [] });
+  });
+  test("K10 byte recipes", () => {
+    expect(bytes(recipes.base64ToBytes.decode("SGVsbG8="))).toEqual([72, 101, 108, 108, 111]);
+    expect(recipes.base64ToBytes.encode(new Uint8Array([72, 101, 108, 108, 111]))).toBe("SGVsbG8=");
+    expect(bytes(recipes.base64urlToBytes.decode("SGVsbG8"))).toEqual([72, 101, 108, 108, 111]);
+    expect(bytes(recipes.hexToBytes.decode("48656c6c6f"))).toEqual([72, 101, 108, 108, 111]);
+    expect(recipes.hexToBytes.encode(new Uint8Array([72, 101, 108, 108, 111]))).toBe("48656c6c6f");
+    expect(recipes.bytesToUtf8.decode(recipes.utf8ToBytes.decode("Hello, 世界!"))).toBe("Hello, 世界!");
+    expect(bytes(recipes.bytesToUtf8.encode("Hi"))).toEqual([72, 105]);
+  });
+  test("K11 URL and URI recipes", () => {
+    expect(recipes.stringToURL.encode(new URL("https://example.com"))).toBe("https://example.com/");
+    expect(recipes.stringToURL.decode("https://example.com/path")).toBeInstanceOf(URL);
+    expect(recipes.stringToHttpURL.safeDecode("mailto:a@b.co").success).toBe(false);
+    expect(recipes.uriComponent.decode("Hello%20World%21")).toBe("Hello World!");
+    expect(recipes.uriComponent.encode("Hello World!")).toBe("Hello%20World!");
+  });
+});
+
+describe("M: metadata and JSON Schema (references/metadata-and-json-schema.md)", () => {
+  test("M1 registry add, has, get, remove, clear; register returns the same schema", () => {
+    const reg = z.registry<{ description: string }>();
+    const s = z.string();
+    reg.add(s, { description: "x" });
+    expect([reg.has(s), reg.get(s)]).toEqual([true, { description: "x" }]);
+    reg.remove(s);
+    expect(reg.has(s)).toBe(false);
+    const n = z.number();
+    expect(n.register(reg, { description: "n" })).toBe(n);
+    reg.clear();
+    expect(reg.has(n)).toBe(false);
+  });
+  test("M2 on 4.6.7 .refine() and checks keep metadata; wrappers drop it", () => {
+    const reg = z.registry<{ description: string }>();
+    const A = z.string().register(reg, { description: "A" });
+    expect(reg.get(A.refine(() => true))).toEqual({ description: "A" });
+    expect(reg.get(A.min(1))).toEqual({ description: "A" });
+    expect(reg.get(A.optional())).toBeUndefined();
+    expect(reg.get(A.transform((s) => s))).toBeUndefined();
+  });
+  test("M3 on 4.6.7 a duplicate id is accepted by add() and throws in one toJSONSchema() conversion", () => {
+    const reg = z.registry<{ id: string }>();
+    const a = z.string();
+    const b = z.number();
+    expect(() => {
+      reg.add(a, { id: "Dup" });
+      reg.add(b, { id: "Dup" });
+    }).not.toThrow();
+    expect(() => z.toJSONSchema(z.object({ a, b }), { metadata: reg })).toThrow(/Duplicate schema id "Dup"/);
+    expect(Object.keys((z.toJSONSchema(reg) as { schemas: object }).schemas)).toEqual(["Dup"]);
+  });
+  test("M4 toJSONSchema output shape and io", () => {
+    expect(z.toJSONSchema(z.object({ name: z.string(), age: z.number() }))).toEqual({
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      properties: { name: { type: "string" }, age: { type: "number" } },
+      required: ["name", "age"],
+      additionalProperties: false,
+    });
+    expect(z.toJSONSchema(z.object({ name: z.string() }), { io: "input" })).not.toHaveProperty("additionalProperties");
+    const Lengthy = z.string().transform((v) => v.length).pipe(z.number());
+    expect(z.toJSONSchema(Lengthy)).toMatchObject({ type: "number" });
+    expect(z.toJSONSchema(Lengthy, { io: "input" })).toMatchObject({ type: "string" });
+  });
+  test("M5 unrepresentable, cycles, reused, target, metadata", () => {
+    expect(() => z.toJSONSchema(z.bigint())).toThrow(/BigInt cannot be represented/);
+    expect(z.toJSONSchema(z.bigint(), { unrepresentable: "any" })).not.toHaveProperty("type");
+    const dated = z.toJSONSchema(z.object({ at: z.date() }), {
+      unrepresentable: ({ zodSchema }) => (zodSchema._zod.def.type === "date" ? { type: "string", format: "date-time" } : "throw"),
+    }) as { properties: Record<string, unknown> };
+    expect(dated.properties.at).toEqual({ type: "string", format: "date-time" });
+    const User: z.ZodType = z.object({ name: z.string(), get friend() { return User; } });
+    expect((z.toJSONSchema(User) as { properties: Record<string, unknown> }).properties.friend).toEqual({ $ref: "#" });
+    expect(() => z.toJSONSchema(User, { cycles: "throw" })).toThrow(/Cycle detected/);
+    const name = z.string();
+    expect(z.toJSONSchema(z.object({ f: name, l: name }), { reused: "ref" })).toHaveProperty("$defs");
+    expect(z.toJSONSchema(z.string(), { target: "draft-07" })).toMatchObject({ $schema: "http://json-schema.org/draft-07/schema#" });
+    const reg = z.registry<{ title: string }>();
+    expect(z.toJSONSchema(z.string().register(reg, { title: "T" }), { metadata: reg })).toMatchObject({ title: "T" });
+    expect(z.toJSONSchema(z.string().register(reg, { title: "T" }), { metadata: z.registry() })).not.toHaveProperty("title");
+  });
+  test("M6 a registry converts to { schemas } keyed by id", () => {
+    const reg = z.registry<{ id: string }>();
+    reg.add(z.object({ title: z.string() }), { id: "Post" });
+    expect(z.toJSONSchema(reg)).toEqual({
+      schemas: {
+        Post: {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          type: "object",
+          properties: { title: { type: "string" } },
+          required: ["title"],
+          additionalProperties: false,
+        },
+      },
+    });
+  });
+  test("M7 fromJSONSchema reads the 4.6 keywords", () => {
+    expect(z.fromJSONSchema({ type: "object", minProperties: 2 }).safeParse({ a: 1 }).success).toBe(false);
+    expect(z.fromJSONSchema({ type: "array", uniqueItems: true }).safeParse([{ a: 1 }, { a: 1 }]).success).toBe(false);
+    expect(z.fromJSONSchema({ type: "array", contains: { type: "number" }, minContains: 2 }).safeParse(["a", 2]).success).toBe(false);
+  });
+});
+
+describe("N: rules added in 1.3.0", () => {
+  test("N1 parse-validate-boolean: validate() narrows to the input type", () => {
+    const Port = z.string().regex(z.regexes.integer).transform(Number);
+    const raw: unknown = "8080";
+    expect(Port.validate(raw)).toBe(true);
+    expect((raw as string) + 1).toBe("80801");
+    const r = Port.safeParse(raw);
+    expect(r.success && r.data + 1).toBe(8081);
+  });
+  test("N2 schema-json-string: z.json() returns text unparsed; JSON.parse in a transform escapes safeParse", () => {
+    expect(z.json().parse('{"name":"Ada"}')).toBe('{"name":"Ada"}');
+    const FromText = z.string().transform((s) => JSON.parse(s)).pipe(z.object({ name: z.string() }));
+    expect(() => FromText.safeParse("{bad")).toThrow(SyntaxError);
+  });
+  test("N3 objects-and-composition: exactOptional, symbol keys, readonly freezes, properties keeps the instance", () => {
+    const Profile = z.object({ nickname: z.string().exactOptional() });
+    expect([Profile.safeParse({}).success, Profile.safeParse({ nickname: undefined }).success]).toEqual([true, false]);
+    const TAG = Symbol("tag");
+    const Tagged = z.object({ name: z.string(), [TAG]: z.number() });
+    expect([Tagged.safeParse({ name: "a", [TAG]: 1 }).success, Tagged.safeParse({ name: "a" }).success]).toEqual([true, false]);
+    expect(Object.isFrozen(z.object({ host: z.string() }).readonly().parse({ host: "h" }))).toBe(true);
+    class Box { constructor(public size: number) {} }
+    const box = new Box(3);
+    expect(z.instanceof(Box).properties({ size: z.number().min(1) }).parse(box)).toBe(box);
+  });
+  test("N4 schema-types: stringFormat gives invalid_format", () => {
+    expect(z.stringFormat("cool-id", /^cool-[a-z0-9]{8}$/).safeParse("x").error?.issues[0]?.code).toBe("invalid_format");
+    expect(z.stringFormat("cool-id", /^cool-[a-z0-9]{8}$/).safeParse("cool-abcd1234").success).toBe(true);
+  });
+});
+
+guard("D3", "no release-specific section in SKILL.md or AGENTS.md", /^## Zod 4\.[0-9]/m);
+// Example values in code, such as "2024-01-15T10:30:00.000Z", are data. A date in prose says when something was checked.
+guard(
+  "DATE",
+  "no check dates or calendar dates in the skill prose",
+  /\b20\d\d-\d\d-\d\d\b(?!T)|\b(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\.? (\d{1,2}(st|nd|rd|th)?\b|20\d\d\b)|\b\d{1,2}(st|nd|rd|th)? (January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/,
+  "all",
+  /^\s*(\/\/|z\.|[A-Za-z]+\.(de|en)code|[a-z]\w*\.(safe)?[Pp]arse|const |expect|\|.*`"20)|new Date\(|"20\d\d-\d\d-\d\d/,
+);

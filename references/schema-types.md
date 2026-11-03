@@ -70,7 +70,14 @@ z.jwt()
 z.creditCard()     // Luhn checksum
 z.currencyCode()   // ISO 4217
 z.iban()           // ISO 7064 mod-97 checksum
-z.hash("sha256")   // or "sha1", "sha384", "sha512", "md5"
+z.hash("sha256")   // hex digest of the right length; or "sha1", "sha384", "sha512", "md5"
+```
+
+For a format Zod does not have, `z.stringFormat()` gives `invalid_format` issues, which name the format, where `.refine()` gives `custom`:
+
+```typescript
+const CoolId = z.stringFormat("cool-id", /^cool-[a-z0-9]{8}$/)
+CoolId.safeParse("x").error?.issues[0]?.code // "invalid_format"
 ```
 
 `z.cuid()` still exists and is deprecated: CUID v1 leaks information. Use `z.cuid2()`.
@@ -240,6 +247,48 @@ const NonEmptyString = z.custom<string>(
   { error: "Must be a non-empty string" }
 )
 // Without a function, z.custom<T>() accepts any value and only sets the type
+```
+
+`z.instanceof(Class)` checks `instanceof`:
+
+```typescript
+const ErrorSchema = z.instanceof(Error)
+ErrorSchema.safeParse(new Error("test")).success // true
+ErrorSchema.safeParse("not an error").success    // false
+```
+
+## Functions
+
+`z.function()` is not a schema in Zod 4. It builds a wrapper that validates the arguments and the return value of an implementation.
+
+```typescript
+const LongerThan = z.function({
+  input: [z.string(), z.number()], // parameters: an array or a z.tuple()
+  output: z.boolean(),
+})
+
+const longerThan = LongerThan.implement((s, n) => s.length > n)
+longerThan("abc", 1) // true; bad arguments or a bad return value throw
+```
+
+The Zod 3 form `z.function(args, returns)` does not type-check. A call with bad arguments throws `z.core.$ZodError`; on 4.6.7 `instanceof z.ZodError` is `false` for it. Use `.implementAsync()` for an async implementation.
+
+## Branded Types
+
+`.brand<"Name">()` adds a type-only brand, so two structurally identical types do not mix. The only way to get a branded value is to parse it.
+
+```typescript
+const USD = z.number().brand<"USD">()
+const EUR = z.number().brand<"EUR">()
+type USD = z.infer<typeof USD> // number & z.$brand<"USD">
+
+function pay(amount: USD) { return amount }
+const euros = EUR.parse(100)
+// @ts-expect-error EUR is not assignable to USD
+pay(euros)
+
+const UserId = z.string().brand<"UserId">()
+const Slug = z.string().regex(/^[a-z0-9-]+$/).brand<"Slug">()
 ```
 
 ## Optional, Nullable, Nullish

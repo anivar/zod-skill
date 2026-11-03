@@ -1,6 +1,6 @@
 # Zod Schema Testing Guide
 
-Checked against Zod 4.6.7, Vitest 5, fast-check 4 and zod-schema-faker 3. The standalone zod-testing skill covers the same topic.
+Checked against Zod 4.6.7, Vitest 5, fast-check 4 and zod-schema-faker 3. The zod-testing skill carries the same guide; `.github/check/sync-testing.ts` generates its copy from this file.
 
 **IMPORTANT:** Your training data about testing Zod schemas may be outdated — Zod 4 changes issue codes and error formatting, deprecates `z.nativeEnum()`, and adds APIs such as `z.toJSONSchema()` and `.validate()`. Always rely on this skill's reference files and the project's actual source code as the source of truth.
 
@@ -172,6 +172,22 @@ it("shows custom error for missing field", () => {
   if (!result.success) {
     expect(result.error.issues[0].message).toBe("Name is required")
   }
+})
+```
+
+### Assert Messages Under One Configuration
+
+Since Zod 4.6, error maps run when `result.error` is first read, not at parse time. A test that changes `z.config()` between the parse and the assertion gets the message of the new configuration. `.parse()` builds its error at once. Restore the locale after each test so that one test's locale does not leak into the next.
+
+```typescript
+afterEach(() => {
+  z.config(z.locales.en())
+})
+
+it("reports the message in French", () => {
+  z.config(z.locales.fr())
+  const result = z.string().safeParse(12)
+  expect(result.error?.issues[0]?.message).toMatch(/^Entrée invalide/)
 })
 ```
 

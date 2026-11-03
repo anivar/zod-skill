@@ -1,5 +1,7 @@
 # Linting and CI Rules for Zod
 
+Checked against Zod 4.6.7, ESLint 10.14.0 with typescript-eslint 8.72.1, and madge 8.0.0. The knip and ts-prune commands were not run.
+
 ## Overview
 
 Mechanical enforcement catches mistakes before code review. Use ESLint rules, CI checks, and static analysis tools to enforce Zod best practices automatically.
