@@ -1,6 +1,6 @@
 // Behaviour claims the skill makes, each proved on the pinned zod, and text guards that fail when a
 // corrected claim comes back. Test names carry the audit ids (F, P, S) and
-// the ids of later findings (R).
+// the ids of later findings (R). V tests prove the Zod 3 statements on the pinned zod3 alias.
 //
 // Usage: bun test claims.test.ts
 //        SKILL_ROOT=<path to another checkout> bun test claims.test.ts   # run the text guards against it
@@ -9,6 +9,9 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import * as z from "zod";
 import * as zm from "zod/mini";
+import * as z3 from "zod3";
+import * as z3v4 from "zod3/v4";
+import * as z4v3 from "zod/v3";
 
 const ROOT = resolve(process.env.SKILL_ROOT ?? join(import.meta.dir, "../.."));
 const ZOD = dirname(Bun.resolveSync("zod/package.json", import.meta.dir));
@@ -16,13 +19,15 @@ const typings = (rel: string) => readFileSync(join(ZOD, rel), "utf8");
 
 type Doc = { file: string; text: string };
 const docs: Doc[] = (() => {
-  const files = ["SKILL.md", "AGENTS.md", "README.md"].filter((f) => existsSync(join(ROOT, f)));
-  for (const dir of ["rules", "references"]) {
+  const files = ["SKILL.md", "AGENTS.md", "README.md", "v3/AGENTS.md"].filter((f) => existsSync(join(ROOT, f)));
+  for (const dir of ["rules", "references", "v3/rules", "v3/references"]) {
     if (!existsSync(join(ROOT, dir))) continue;
     for (const f of readdirSync(join(ROOT, dir)).sort()) if (f.endsWith(".md")) files.push(`${dir}/${f}`);
   }
   return files.map((file) => ({ file, text: readFileSync(join(ROOT, file), "utf8") }));
 })();
+// The files under v3/ state Zod 3 facts. A guard against a wrong Zod 4 statement scans the Zod 4 files only.
+const isV3 = (d: Doc) => d.file.startsWith("v3/");
 
 // Lines inside ``` fences, with their file and line number.
 const codeLines = (d: Doc) => {
@@ -35,10 +40,11 @@ const codeLines = (d: Doc) => {
   return out;
 };
 
-// Every match of `pattern` in the skill text. `where` limits the scan to code lines.
-function hits(pattern: RegExp, where: "all" | "code" = "all", skipLine?: RegExp): string[] {
+// Every match of `pattern` in the skill text. `where` limits the scan to code lines; `scope` "v4" leaves out
+// the files under v3/.
+function hits(pattern: RegExp, where: "all" | "code" = "all", skipLine?: RegExp, scope: "v4" | "all" = "v4"): string[] {
   const found: string[] = [];
-  for (const d of docs) {
+  for (const d of scope === "all" ? docs : docs.filter((d) => !isV3(d))) {
     if (where === "code") {
       for (const l of codeLines(d)) if (pattern.test(l.text) && !skipLine?.test(l.text)) found.push(`${d.file}:${l.line}: ${l.text.trim()}`);
       continue;
@@ -54,12 +60,13 @@ function hits(pattern: RegExp, where: "all" | "code" = "all", skipLine?: RegExp)
   return found;
 }
 
-const guard = (id: string, what: string, pattern: RegExp, where: "all" | "code" = "all", skipLine?: RegExp) =>
-  test(`${id} text: ${what}`, () => expect(hits(pattern, where, skipLine)).toEqual([]));
+const guard = (id: string, what: string, pattern: RegExp, where: "all" | "code" = "all", skipLine?: RegExp, scope: "v4" | "all" = "v4") =>
+  test(`${id} text: ${what}`, () => expect(hits(pattern, where, skipLine, scope)).toEqual([]));
 
 test("the text guards scan the skill", () => {
   expect(docs.some((d) => d.file === "SKILL.md")).toBe(true);
   expect(docs.filter((d) => d.file.startsWith("rules/")).length).toBeGreaterThan(20);
+  expect(docs.filter((d) => d.file.startsWith("v3/rules/")).length).toBeGreaterThan(10);
 });
 
 describe("F: APIs the skill called wrongly", () => {
@@ -766,7 +773,7 @@ describe("N: rules added in 1.3.0", () => {
   });
 });
 
-guard("D3", "no release-specific section in SKILL.md or AGENTS.md", /^## Zod 4\.[0-9]/m);
+guard("D3", "no release-specific section in SKILL.md, AGENTS.md or the v3 files", /^## Zod [34]\.[0-9]/m, "all", undefined, "all");
 // Example values in code, such as "2024-01-15T10:30:00.000Z", are data. A date in prose says when something was checked.
 guard(
   "DATE",
@@ -774,4 +781,300 @@ guard(
   /\b20\d\d-\d\d-\d\d\b(?!T)|\b(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\.? (\d{1,2}(st|nd|rd|th)?\b|20\d\d\b)|\b\d{1,2}(st|nd|rd|th)? (January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/,
   "all",
   /^\s*(\/\/|z\.|[A-Za-z]+\.(de|en)code|[a-z]\w*\.(safe)?[Pp]arse|const |expect|\|.*`"20)|new Date\(|"20\d\d-\d\d-\d\d/,
+  "all",
 );
+
+describe("V: Zod 3 (v3/references/zod-3.md, v3/rules/*.md), proved on the zod3 alias", () => {
+  type Result = { success: boolean; error?: { issues: { code: string; path: PropertyKey[]; message: string }[] } };
+  const issues = (r: Result) => (r.success ? [] : (r.error?.issues ?? []).map((i) => `${i.code}${i.path.length ? `@${i.path.join(".")}` : ""}: ${i.message}`));
+  const rec = (x: unknown) => x as Record<string, unknown>;
+
+  test("V1 both package lines expose zod/v3 and zod/v4", () => {
+    expect(typeof z3v4.email).toBe("function");
+    expect(typeof z3v4.flattenError).toBe("function");
+    expect(typeof rec(z4v3).email).toBe("undefined");
+    expect(z4v3.string().email().safeParse("a@b.co").success).toBe(true);
+  });
+
+  test("V2 Zod 3 has none of the top-level Zod 4 APIs the rules teach", () => {
+    const absent = ["email", "uuid", "url", "ipv4", "stringbool", "json", "codec", "compile", "flattenError", "treeifyError", "prettifyError", "formatError", "toJSONSchema", "registry", "looseObject", "int", "iso", "partialRecord", "xor", "config"];
+    expect(absent.filter((n) => n in z3)).toEqual([]);
+    for (const n of ["strictObject", "NEVER", "ZodIssueCode", "nativeEnum", "lazy", "preprocess", "function", "coerce", "discriminatedUnion", "setErrorMap"]) expect(n in z3).toBe(true);
+  });
+
+  test("V3 Zod 3 schema, object and ZodError methods", () => {
+    const s = rec(z3.string());
+    expect(["validate", "validateAsync", "decode", "encode", "prefault", "check", "meta", "register", "overwrite", "safeExtend", "exactOptional"].filter((m) => typeof s[m] === "function")).toEqual([]);
+    expect(["email", "url", "uuid", "ip", "cidr", "datetime", "base64url", "pipe", "brand"].every((m) => typeof s[m] === "function")).toBe(true);
+    const o = rec(z3.object({}));
+    expect(["strict", "passthrough", "strip", "merge", "deepPartial", "catchall"].every((m) => typeof o[m] === "function")).toBe(true);
+    expect(["flatten", "format"].every((m) => typeof rec(z3.ZodError.prototype)[m] === "function")).toBe(true);
+  });
+
+  test("V4 Zod 3 error customization: required_error, invalid_type_error, message, errorMap; the Zod 4 `error` key is ignored", () => {
+    expect(issues(z3.string({ required_error: "Name is required" }).safeParse(undefined))).toEqual(["invalid_type: Name is required"]);
+    expect(issues(z3.string({ invalid_type_error: "Must be text" }).safeParse(1))).toEqual(["invalid_type: Must be text"]);
+    expect(issues(z3.string().min(5, { message: "Too short" }).safeParse("ab"))).toEqual(["too_small: Too short"]);
+    expect(issues(z3.string().min(5, "Too short!").safeParse("ab"))).toEqual(["too_small: Too short!"]);
+    expect(issues(z3.string({ errorMap: () => ({ message: "Mapped" }) }).safeParse(1))).toEqual(["invalid_type: Mapped"]);
+    expect(issues(z3.string().min(5, { error: "Too short" } as never).safeParse("ab"))).toEqual(["too_small: String must contain at least 5 character(s)"]);
+  });
+
+  test("V5 Zod 3 precedence: parse-level map, then schema-bound, then z.setErrorMap(); Zod 4 puts the schema first", () => {
+    const three = z3.string({ errorMap: () => ({ message: "Schema" }) }).safeParse(1, { errorMap: () => ({ message: "Contextual" }) });
+    expect(issues(three)).toEqual(["invalid_type: Contextual"]);
+    z3.setErrorMap(() => ({ message: "Global" }));
+    try {
+      expect(z3.string({ errorMap: () => ({ message: "Schema" }) }).safeParse(1).error?.issues[0]?.message).toBe("Schema");
+      expect(z3.string().safeParse(1).error?.issues[0]?.message).toBe("Global");
+      expect(z3.string().safeParse(1, { errorMap: () => ({ message: "Contextual" }) }).error?.issues[0]?.message).toBe("Contextual");
+    } finally {
+      z3.setErrorMap(z3.defaultErrorMap);
+    }
+    expect(z3.string().safeParse(1).error?.issues[0]?.message).toBe("Expected string, received number");
+    expect(z.string({ error: () => "Schema" }).safeParse(1, { error: () => "Contextual" }).error?.issues[0]?.message).toBe("Schema");
+  });
+
+  test("V6 Zod 3 ZodError: .errors is .issues; .flatten() and .format() are methods", () => {
+    const err = z3.object({ email: z3.string().email(), n: z3.object({ a: z3.string() }) }).safeParse({ email: "x", n: { a: 1 } }).error;
+    expect(err?.errors).toBe(err?.issues as never);
+    expect(err?.flatten()).toEqual({ formErrors: [], fieldErrors: { email: ["Invalid email"], n: ["Expected string, received number"] } });
+    expect(JSON.stringify(z3.object({ email: z3.string().email() }).safeParse({ email: "x" }).error?.format())).toBe('{"_errors":[],"email":{"_errors":["Invalid email"]}}');
+    expect(err && "formErrors" in err).toBe(true);
+  });
+
+  test("V7 Zod 3 issue fields and codes", () => {
+    const fmt = rec(z3.string().email().safeParse("x").error?.issues[0]);
+    expect([fmt.code, fmt.validation, "input" in fmt]).toEqual(["invalid_string", "email", false]);
+    const type = rec(z3.string().safeParse(1).error?.issues[0]);
+    expect([type.code, type.expected, type.received]).toEqual(["invalid_type", "string", "number"]);
+    expect("unionErrors" in rec(z3.union([z3.string(), z3.number()]).safeParse(true).error?.issues[0])).toBe(true);
+    const du = z3.discriminatedUnion("type", [z3.object({ type: z3.literal("a") }), z3.object({ type: z3.literal("b") })]).safeParse({ type: "c" });
+    expect(issues(du)).toEqual(["invalid_union_discriminator@type: Invalid discriminator value. Expected 'a' | 'b'"]);
+    expect(Object.keys(z3.ZodIssueCode).sort()).toEqual([
+      "custom", "invalid_arguments", "invalid_date", "invalid_enum_value", "invalid_intersection_types", "invalid_literal", "invalid_return_type",
+      "invalid_string", "invalid_type", "invalid_union", "invalid_union_discriminator", "not_finite", "not_multiple_of", "too_big", "too_small", "unrecognized_keys",
+    ]);
+  });
+
+  test("V8 the default messages differ between the versions", () => {
+    expect(z3.string().safeParse(undefined).error?.issues[0]?.message).toBe("Required");
+    expect(z.string().safeParse(undefined).error?.issues[0]?.message).toBe("Invalid input: expected string, received undefined");
+    expect(z3.string().email().safeParse("x").error?.issues[0]?.message).toBe("Invalid email");
+    expect(z.email().safeParse("x").error?.issues[0]?.message).toBe("Invalid email address");
+    expect(z3.string().min(5).safeParse("ab").error?.issues[0]?.message).toBe("String must contain at least 5 character(s)");
+    expect(z.string().min(5).safeParse("ab").error?.issues[0]?.message).toBe("Too small: expected string to have >=5 characters");
+  });
+
+  test("V9 Zod 3 parses the default value; Zod 4 short-circuits", () => {
+    expect(issues(z3.string().min(5).default("ab").safeParse(undefined))).toEqual(["too_small: String must contain at least 5 character(s)"]);
+    expect(z.string().min(5).default("ab").safeParse(undefined)).toEqual({ success: true, data: "ab" });
+    expect(z3.string().transform((s) => s.length).default("tuna").parse(undefined)).toBe(4);
+  });
+
+  test("V10 z.coerce: a missing key coerces to false in Zod 3 and fails in Zod 4; Boolean(\"false\") is true in both", () => {
+    expect(z3.object({ foo: z3.coerce.boolean() }).safeParse({})).toEqual({ success: true, data: { foo: false } });
+    expect(z.object({ foo: z.coerce.boolean() }).safeParse({}).success).toBe(false);
+    expect([z3.coerce.boolean().parse("false"), z.coerce.boolean().parse("false")]).toEqual([true, true]);
+  });
+
+  test("V11 Zod 3 objects: optional defaults, any/unknown keys, enum records, single-argument records, strict, passthrough, merge", () => {
+    expect(z3.object({ a: z3.string().default("tuna").optional() }).parse({})).toEqual({});
+    expect(z3.object({ a: z3.any(), b: z3.unknown() }).safeParse({}).success).toBe(true);
+    expect(z3.record(z3.enum(["a", "b"]), z3.number()).safeParse({ a: 1 }).success).toBe(true);
+    expect(z.record(z.enum(["a", "b"]), z.number()).safeParse({ a: 1 }).success).toBe(false);
+    expect(z3.record(z3.number()).safeParse({ a: 1 }).success).toBe(true);
+    expect(issues(z3.object({ a: z3.string() }).strict().safeParse({ a: "x", b: 1 }))).toEqual(["unrecognized_keys: Unrecognized key(s) in object: 'b'"]);
+    expect(z3.object({ a: z3.string() }).passthrough().parse({ a: "x", b: 1 })).toEqual({ a: "x", b: 1 });
+    expect(Object.keys(z3.object({ a: z3.string() }).merge(z3.object({ b: z3.number() })).shape)).toEqual(["a", "b"]);
+    expect(z3.object({ a: z3.object({ b: z3.string() }) }).deepPartial().safeParse({ a: {} }).success).toBe(true);
+  });
+
+  test("V12 recursion in Zod 3: z.lazy() works, a getter works at runtime, cyclic input overflows the stack", () => {
+    type Cat = { name: string; children: Cat[] };
+    const Lazy: z3.ZodType<Cat> = z3.object({ name: z3.string(), children: z3.lazy(() => z3.array(Lazy)) });
+    expect(Lazy.safeParse({ name: "a", children: [{ name: "b", children: [] }] }).success).toBe(true);
+    const Getter: z3.ZodTypeAny = z3.object({ name: z3.string(), get children() { return z3.array(Getter); } });
+    expect(Getter.safeParse({ name: "a", children: [{ name: "b", children: [] }] }).success).toBe(true);
+    const Node: z3.ZodTypeAny = z3.object({ children: z3.lazy(() => z3.array(Node)) });
+    const cyc: { children: unknown[] } = { children: [] };
+    cyc.children.push(cyc);
+    expect(() => Node.safeParse(cyc)).toThrow(RangeError);
+    const Node4 = z.object({ get children() { return z.array(Node4); } });
+    expect(Node4.safeParse(cyc).success).toBe(true);
+  });
+
+  test("V13 Zod 3 functions: .args().returns().implement() validates; the Zod 4 object form is not a function schema", () => {
+    const f = z3.function().args(z3.string()).returns(z3.number()).implement((s) => s.length);
+    expect(f("abc")).toBe(3);
+    expect(() => (f as unknown as (n: number) => number)(42)).toThrow(z3.ZodError);
+    const objectForm = (z3.function as unknown as (a: unknown) => { implement(fn: (...a: unknown[]) => unknown): (...a: unknown[]) => unknown })({ input: [z3.string()], output: z3.number() });
+    let caught: unknown;
+    try {
+      objectForm.implement(() => 1)("abc");
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect(caught instanceof z3.ZodError).toBe(false);
+  });
+
+  test("V14 Zod 3 enums: z.nativeEnum() works, z.enum(TSEnum) builds and throws on parse, .Enum/.Values/.enum all exist", () => {
+    enum Role { Admin = "admin", User = "user" }
+    expect(z3.nativeEnum(Role).safeParse("admin").success).toBe(true);
+    const wrong = (z3.enum as unknown as (e: unknown) => z3.ZodTypeAny)(Role);
+    expect(() => wrong.safeParse("admin")).toThrow(TypeError);
+    const S = z3.enum(["a", "b"]);
+    expect([S.Enum.a, S.Values.a, S.enum.a]).toEqual(["a", "a", "a"]);
+    expect(z.enum(Role).safeParse("admin").success).toBe(true);
+  });
+
+  test("V15 Zod 3 strings and numbers: datetime seconds, uuid variant, ip/cidr, Infinity, unsafe int, base64url padding, length units", () => {
+    expect([z3.string().datetime().safeParse("2024-01-01T10:00Z").success, z.iso.datetime().safeParse("2024-01-01T10:00Z").success]).toEqual([true, false]);
+    const badVariant = "c232ab00-9414-11ec-03c8-9f6bdeced846";
+    expect([z3.string().uuid().safeParse(badVariant).success, z.uuid().safeParse(badVariant).success]).toEqual([true, false]);
+    expect([z3.string().ip().safeParse("1.2.3.4").success, z3.string().cidr().safeParse("10.0.0.0/8").success]).toEqual([true, true]);
+    expect([z3.number().safeParse(Infinity).success, z3.number().finite().safeParse(Infinity).success, z.number().safeParse(Infinity).success]).toEqual([true, false, false]);
+    expect([z3.number().int().safeParse(2 ** 60).success, z.number().int().safeParse(2 ** 60).success]).toEqual([true, false]);
+    expect([z3.string().base64url().safeParse("YQ==").success, z.base64url().safeParse("YQ==").success]).toEqual([true, false]);
+    expect([z3.string().length(1).safeParse("😀").success, z.string().length(1).safeParse("😀").success]).toEqual([false, true]);
+  });
+
+  test("V16 Zod 3 refinements: a throw escapes safeParse, ctx.addIssue + z.NEVER reports, no ctx.issues, ctx.path exists, async needs parseAsync", () => {
+    expect(() => z3.string().refine(() => { throw new Error("boom"); }).safeParse("x")).toThrow("boom");
+    const T = z3.string().transform((v, ctx) => {
+      ctx.addIssue({ code: z3.ZodIssueCode.custom, message: `Not a number: ${v}` });
+      return z3.NEVER;
+    });
+    expect(issues(T.safeParse("x"))).toEqual(["custom: Not a number: x"]);
+    let ctxIssues: unknown = "unset";
+    z3.string().transform((_v, ctx) => { ctxIssues = rec(ctx).issues; return 1; }).safeParse("x");
+    expect(ctxIssues).toBeUndefined();
+    let p3: unknown;
+    z3.object({ a: z3.string().superRefine((_v, ctx) => { p3 = ctx.path; }) }).safeParse({ a: "x" });
+    expect(p3).toEqual(["a"]);
+    let p4: unknown = "unset";
+    z.object({ a: z.string().superRefine((_v, ctx) => { p4 = rec(ctx).path; }) }).safeParse({ a: "x" });
+    expect(p4).toBeUndefined();
+    expect(() => z3.string().refine(async () => true).safeParse("x")).toThrow(/parseAsync/);
+    expect(issues(z3.string().refine((v) => v.length > 10, (v) => ({ message: `${v} is short` })).safeParse("ab"))).toEqual(["custom: ab is short"]);
+    const Form = z3.object({ a: z3.string().min(5), b: z3.string() }).refine((d) => d.a === d.b, { message: "mismatch", path: ["b"] });
+    expect(issues(Form.safeParse({ a: "ab", b: "x" }))).toEqual(["too_small@a: String must contain at least 5 character(s)", "custom@b: mismatch"]);
+    expect(issues(Form.safeParse({ a: 1, b: "x" }))).toEqual(["invalid_type@a: Expected string, received number"]);
+  });
+
+  test("V17 Zod 3.25 implements Standard Schema; .pipe(), z.preprocess(), .brand() and z.setErrorMap() exist", () => {
+    const s = rec(z3.string())["~standard"] as { vendor: string; version: number };
+    expect([s.vendor, s.version]).toEqual(["zod", 1]);
+    expect(z3.string().pipe(z3.coerce.number()).parse("42")).toBe(42);
+    expect(z3.preprocess((v) => String(v), z3.string()).parse(12)).toBe("12");
+    expect(z3.number().brand<"USD">().parse(5)).toBe(5);
+    expect(typeof z3.setErrorMap).toBe("function");
+  });
+
+  test("V18 Zod 3 issue fields, ctx.defaultError, and the recipes in the Zod 3 rule files", () => {
+    const lit = rec(z3.literal("a").safeParse("b").error?.issues[0]);
+    expect([lit.code, lit.expected]).toEqual(["invalid_literal", "a"]);
+    const en = rec(z3.enum(["a", "b"]).safeParse("c").error?.issues[0]);
+    expect([en.code, en.options]).toEqual(["invalid_enum_value", ["a", "b"]]);
+    const keys = rec(z3.object({ a: z3.string() }).strict().safeParse({ a: "x", b: 1 }).error?.issues[0]);
+    expect([keys.code, keys.keys]).toEqual(["unrecognized_keys", ["b"]]);
+    const small = rec(z3.string().min(5).safeParse("ab").error?.issues[0]);
+    expect([small.code, small.minimum, small.inclusive, small.type]).toEqual(["too_small", 5, true, "string"]);
+    const mult = rec(z3.number().multipleOf(5).safeParse(7).error?.issues[0]);
+    expect([mult.code, mult.multipleOf]).toEqual(["not_multiple_of", 5]);
+    const disc = rec(z3.discriminatedUnion("t", [z3.object({ t: z3.literal("a") }), z3.object({ t: z3.literal("b") })]).safeParse({ t: "c" }).error?.issues[0]);
+    expect([disc.code, disc.options]).toEqual(["invalid_union_discriminator", ["a", "b"]]);
+    const custom = rec(z3.string().superRefine((_v, ctx) => ctx.addIssue({ code: z3.ZodIssueCode.custom, message: "m", params: { k: 1 } })).safeParse("x").error?.issues[0]);
+    expect([custom.code, custom.params]).toEqual(["custom", { k: 1 }]);
+    const f = z3.function().args(z3.string()).returns(z3.number()).implement((s) => s.length);
+    let fnErr: unknown;
+    try {
+      (f as unknown as (n: number) => number)(42);
+    } catch (e) {
+      fnErr = e;
+    }
+    const fnIssue = rec((fnErr as z3.ZodError).issues[0]);
+    expect([fnIssue.code, fnIssue.argumentsError instanceof z3.ZodError]).toEqual(["invalid_arguments", true]);
+    let seenDefault = "";
+    z3.string({ errorMap: (_issue, ctx) => { seenDefault = ctx.defaultError; return { message: "m" }; } }).safeParse(1);
+    expect(seenDefault).toBe("Expected string, received number");
+    const StringBool = z3.enum(["true", "false", "1", "0", "yes", "no", "on", "off"]).transform((v) => v === "true" || v === "1" || v === "yes" || v === "on");
+    const StringBoolCI = z3.preprocess((v) => (typeof v === "string" ? v.toLowerCase() : v), StringBool);
+    expect(z3.object({ debug: StringBool, verbose: StringBoolCI }).parse({ debug: "false", verbose: "OFF" })).toEqual({ debug: false, verbose: false });
+    expect(StringBool.safeParse("maybe").error?.issues[0]?.code).toBe("invalid_enum_value");
+    const Body = z3.object({ name: z3.string() });
+    expect(() => z3.string().transform((s) => JSON.parse(s)).pipe(Body).safeParse("{bad")).toThrow(SyntaxError);
+    const JsonText = z3.string().transform((text, ctx) => {
+      try {
+        return JSON.parse(text) as unknown;
+      } catch (err) {
+        ctx.addIssue({ code: z3.ZodIssueCode.custom, message: err instanceof Error ? err.message : "Invalid JSON" });
+        return z3.NEVER;
+      }
+    });
+    expect(JsonText.pipe(Body).parse('{"name":"Ada"}')).toEqual({ name: "Ada" });
+    expect(issues(JsonText.pipe(Body).safeParse("{bad")).length).toBe(1);
+    expect([z3.coerce.number().parse("0x50"), z3.coerce.number().parse(" 80 ")]).toEqual([80, 80]);
+    expect(z3.string().regex(/^\d+$/).transform(Number).pipe(z3.number().int().min(1).max(65535)).safeParse("0x50").success).toBe(false);
+    expect([z3.string().datetime({ offset: true }).safeParse("2024-01-01T10:00:00+02:00").success, z3.string().datetime().safeParse("2024-01-01T10:00:00+02:00").success]).toEqual([true, false]);
+    const DateFromIso = z3.string().datetime().transform((s) => new Date(s));
+    const IsoFromDate = z3.date().transform((d) => d.toISOString());
+    expect(IsoFromDate.parse(DateFromIso.parse("2024-01-01T00:00:00Z"))).toBe("2024-01-01T00:00:00.000Z");
+    const whole = z3.string().datetime({ precision: 0 });
+    expect([whole.safeParse("2024-01-01T10:00:00Z").success, whole.safeParse("2024-01-01T10:00:00.123Z").success, whole.safeParse("2024-01-01T10:00Z").success]).toEqual([true, false, true]);
+    const err = z3.string().safeParse(1).error!;
+    expect(JSON.parse(err.message)).toEqual(JSON.parse(JSON.stringify(err.issues)));
+    expect(err.toString()).toBe(err.message);
+    const re = rec(z3.string().regex(/^\d+$/).safeParse("x").error?.issues[0]);
+    expect([re.code, re.validation]).toEqual(["invalid_string", "regex"]);
+    const g = z3.function().returns(z3.number()).implement((() => "x") as unknown as () => number);
+    let retErr: unknown;
+    try {
+      g();
+    } catch (e) {
+      retErr = e;
+    }
+    const retIssue = rec((retErr as z3.ZodError).issues[0]);
+    expect([retIssue.code, retIssue.returnTypeError instanceof z3.ZodError]).toEqual(["invalid_return_type", true]);
+    expect(z3.date().safeParse(new Date("x")).error?.issues[0]?.code).toBe("invalid_date");
+    const big = rec(z3.string().max(1).safeParse("abc").error?.issues[0]);
+    expect([big.code, big.maximum, big.inclusive, big.exact, big.type]).toEqual(["too_big", 1, true, false, "string"]);
+    const conflict = z3.intersection(z3.object({ a: z3.string() }).transform(() => ({ a: 1 })), z3.object({ a: z3.string().transform(() => "x") })).safeParse({ a: "s" });
+    expect(conflict.error?.issues[0]?.code).toBe("invalid_intersection_types");
+  });
+
+  test("V19 Zod 3 discriminated unions: literal, enum, nativeEnum and null discriminators work; a string discriminator and a nested union throw at creation", () => {
+    enum K { A = "a" }
+    expect(z3.discriminatedUnion("t", [z3.object({ t: z3.enum(["a", "b"]), x: z3.number() }), z3.object({ t: z3.literal("c") })]).safeParse({ t: "b", x: 1 }).success).toBe(true);
+    expect(z3.discriminatedUnion("t", [z3.object({ t: z3.nativeEnum(K) }), z3.object({ t: z3.literal("c") })]).safeParse({ t: "a" }).success).toBe(true);
+    expect(z3.discriminatedUnion("t", [z3.object({ t: z3.null() }), z3.object({ t: z3.literal("c") })]).safeParse({ t: null }).success).toBe(true);
+    expect(() => z3.discriminatedUnion("t", [z3.object({ t: z3.string() }), z3.object({ t: z3.literal("c") })])).toThrow(/could not be extracted/);
+    const inner = z3.discriminatedUnion("t", [z3.object({ t: z3.literal("a") }), z3.object({ t: z3.literal("b") })]);
+    expect(() => (z3.discriminatedUnion as unknown as (k: string, o: unknown[]) => unknown)("t", [inner, z3.object({ t: z3.literal("c") })])).toThrow(TypeError);
+    const Nested4 = z.discriminatedUnion("t", [z.discriminatedUnion("t", [z.object({ t: z.literal("a") }), z.object({ t: z.literal("b") })]), z.object({ t: z.literal("c") })]);
+    expect(Nested4.safeParse({ t: "a" }).success).toBe(true);
+  });
+
+  test("V every row of the zod-3.md behaviour table names a test that exists, or says Type-level", () => {
+    const file = docs.find((d) => d.file === "v3/references/zod-3.md");
+    expect(file).toBeDefined();
+    const section = /## What parses differently\n([\s\S]*?)(?=\n## )/.exec(file?.text ?? "")?.[1] ?? "";
+    const rows = section.split("\n").filter((l) => /^\| (?!Behaviour|---)/.test(l));
+    expect(rows.length).toBeGreaterThan(12);
+    const names = readFileSync(import.meta.path, "utf8");
+    const bad = rows
+      .map((l) => l.split(/(?<!\\)\|/).map((c) => c.trim()).filter(Boolean).at(-1) ?? "")
+      .filter((id) => !(id === "Type-level" || new RegExp(`test\\("${id} `).test(names)));
+    expect(bad).toEqual([]);
+  });
+
+  test("V the Zod 3 rule files cover the rules whose code differs, and each names its Zod 4 counterpart", () => {
+    const v3Rules = docs.filter((d) => d.file.startsWith("v3/rules/"));
+    for (const d of v3Rules) {
+      const id = d.file.slice("v3/rules/".length, -3);
+      expect(docs.some((x) => x.file === `rules/${id}.md`)).toBe(true);
+      expect(d.text).toContain(`rules/${id}.md`);
+    }
+  });
+});

@@ -1,28 +1,48 @@
 ---
 name: zod
 description: >
-  Zod v4 best practices, patterns, and API guidance for schema validation,
-  parsing, error handling, and type inference in TypeScript applications.
-  Covers safeParse, object composition, refinements, transforms, codecs,
-  branded types, v3→v4 migration, and testing schemas with Jest or Vitest.
-  Baseline: zod ^4.6.0.
+  Zod best practices, patterns, and API guidance for schema validation,
+  parsing, error handling, and type inference in TypeScript applications,
+  for Zod 4 and for projects still on Zod 3. Tells the two apart from the
+  import specifier and the installed version, then applies the rule for that
+  version. Covers safeParse, object composition, refinements, transforms,
+  codecs, branded types, v3→v4 migration, and testing schemas with Jest or
+  Vitest. Baseline: zod ^4.6.0; Zod 3 projects: zod ^3.25.0.
   Triggers on: zod imports, z.object, z.string, z.infer, safeParse,
-  mentions of "zod", "schema validation", "zod v4", "z.enum", or testing a
-  schema — "schema test", "zod mock", zod-schema-faker.
+  mentions of "zod", "schema validation", "zod v4", "zod v3", "zod 3",
+  "zod/v3", "zod/v4", "z.enum", or testing a schema — "schema test",
+  "zod mock", zod-schema-faker.
 license: MIT
 user-invocable: false
 agentic: false
-compatibility: "TypeScript ^5.5 projects using zod ^4.6.0 or later (checked against zod 4.6.7)"
+compatibility: "TypeScript ^5.5 projects using zod ^4.6.0 (checked against zod 4.6.7) or zod ^3.25.0 (checked against zod 3.25.76)"
 metadata:
   author: Anivar Aravind
   author_url: https://anivar.net
-  version: 2.0.0
-  tags: zod, validation, schema, typescript, parsing, type-inference, forms, api, testing, jest, vitest
+  version: 2.1.0
+  tags: zod, validation, schema, typescript, parsing, type-inference, forms, api, testing, jest, vitest, zod3
 ---
 
 # Zod
 
-**IMPORTANT:** Your training data about `zod` may be outdated or incorrect — Zod 4 changes string formats, enums, error customization, issue codes, defaults, and functions. Always rely on this skill's rule files and the project's actual source code as the source of truth. Do not fall back on memorized v3 patterns when they conflict with the retrieved reference.
+**IMPORTANT:** Your training data about `zod` may be outdated or incorrect. Zod 4 changed string formats, enums, error customization, issue codes, defaults and functions, and many projects still run Zod 3, whose forms Zod 4 deprecates or removes. First establish which Zod the file uses (next section). Then rely on this skill's rule files for that version and on the project's own source code as the source of truth. Do not write a Zod 4 API into a Zod 3 file, and do not keep a Zod 3 form in a Zod 4 file unless the rule for that version says it still applies.
+
+## Which Zod
+
+Decide per file, before writing a schema. The import specifier wins; the installed version decides what the bare `zod` specifier means.
+
+| Evidence in the file and the project | API to write |
+|---|---|
+| `from "zod/v4"`, `"zod/v4-mini"` or `"zod/mini"` | Zod 4 |
+| `from "zod/v3"` | Zod 3 |
+| `from "zod"`, and the lockfile resolves `zod` to 4.x | Zod 4 |
+| `from "zod"`, and the lockfile resolves `zod` to 3.x | Zod 3 |
+| No lockfile: the `zod` range in `package.json` (`^3.25.0` is Zod 3, `^4.0.0` is Zod 4) | By range |
+| Nothing resolvable | Say so, default to Zod 4 (npm `latest`), and name the assumption in the change |
+
+Both package lines carry both APIs. `zod@3.25.x` exports Zod 4 at `zod/v4` and `zod/v4-mini`; `zod@4.x` exports Zod 3 at `zod/v3`; zod.dev/v4/versioning says the subpaths stay available. A library that accepts either declares `"zod": "^3.25.0 || ^4.0.0"` (zod.dev/v4/versioning) and follows zod.dev/library-authors.
+
+A Zod 4 file takes `rules/` and `references/` as written. For a Zod 3 file, read `v3/rules/<rule-id>.md` when it exists and apply that form; a rule with no Zod 3 file applies as written, and the check compiles those rules against Zod 3 to keep that true. Two rules have no Zod 3 form at all, `perf-compile` and `perf-zod-mini`; `v3/references/zod-3.md` lists them, with the API map by rule, the Zod 3 error model, and what parses differently between the versions. The `migrate-` rules describe the Zod 4 side of a migration: in a Zod 3 file their "Incorrect" forms are the correct forms until the file moves to `zod/v4`.
 
 ## When to Use Zod
 
@@ -182,6 +202,13 @@ Each rule file contains:
 | 14 | `references/testing-api.md` | Jest and Vitest API reference for schema tests |
 | 15 | `references/testing-anti-patterns.md` | Testing mistakes with BAD/GOOD examples |
 
+### Zod 3
+
+| Priority | File | When to read |
+|----------|------|-------------|
+| 1 | `v3/references/zod-3.md` | Which Zod a file uses, the API map by rule, the Zod 3 error model, what parses differently, the path to Zod 4 |
+| 2 | `v3/rules/<rule-id>.md` | The Zod 3 form of a rule; a file exists only where the form differs |
+
 ## Full Compiled Document
 
-For the complete guide with all rules expanded: `AGENTS.md`
+For the complete guide with all rules expanded: `AGENTS.md`. The Zod 3 forms, expanded: `v3/AGENTS.md`.

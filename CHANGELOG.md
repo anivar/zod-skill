@@ -4,6 +4,50 @@ Notable changes to this skill. The version that matters most in each entry is
 the *upstream* one: a skill about a moving library is only as good as the
 release it was last checked against.
 
+## [2.1.0] — 2026-11-11
+
+Zod 3 projects. Checked against zod 4.6.7 and, for the Zod 3 files, zod 3.25.76, the last
+Zod 3 release line. Nothing moves or is removed; the Zod 4 rule and reference paths are unchanged.
+
+### Added
+
+- **`SKILL.md` "Which Zod".** The agent decides per file, from the import specifier and the
+  installed version, which API to write. Both package lines export both: `zod@3.25.x` has
+  `zod/v4`, `zod@4.x` has `zod/v3`. A Zod 3 file takes `v3/rules/<id>.md` where it exists; the
+  `migrate-` rules' "Incorrect" blocks are the correct Zod 3 code until the file moves to `zod/v4`.
+- **`v3/rules/`**: 27 Zod 3 rule files, one per rule whose code differs, in the same
+  Incorrect→Correct shape; `pattern-branded-types` is the one rule whose code compiles unchanged
+  against Zod 3, and `perf-compile` and `perf-zod-mini` have no Zod 3 form. `.strict()`/`.passthrough()` for unknown keys; `z.lazy()` with a
+  `z.ZodType<T>` annotation for recursion; `message`, `required_error`, `invalid_type_error` and
+  `errorMap` for messages; `.flatten()`/`.format()` for formatting; `ctx.addIssue()` and `z.NEVER`
+  in transforms; an enum-and-transform recipe in place of `z.stringbool()`; a reporting transform
+  in place of `z.json()` and the JSON codec; a schema per direction in place of `z.codec()`;
+  `z.ZodTypeAny` and `z.SafeParseReturnType` in the typed helpers. Each `migrate-` rule has a
+  Zod 3 file that says the Zod 3 form is correct there.
+- **`v3/references/zod-3.md`**: the version test, the API map by rule, what Zod 3 lacks, the
+  Zod 3 error customization and precedence, the Zod 3 issue codes with their fields, a behaviour
+  table of what parses differently (each row names its test), and the migration order from the
+  zod.dev migration guide.
+- **`v3/AGENTS.md`**, generated from `v3/rules/` by `agents.ts`. Both compiled files now carry the
+  "Which Zod" section, so an agent that reads one file alone still sees the version test.
+- **The check.** Every block under `v3/` compiles against zod 3.25.76 through the `zod3` alias in
+  `package.json`; `zod` and `zod/*` imports in those blocks resolve to it, so the text stays what a
+  Zod 3 reader copies, and `zod/mini` fails there as it should. Claims V1–V18 run the Zod 3
+  behaviour statements at runtime beside Zod 4; the type-level statements are `@ts-expect-error`
+  lines in the Zod 3 blocks. The rules that have no Zod 3 file are compiled against Zod 3 as well,
+  so "the Zod 4 rule applies as written" is checked, not asserted; the rules with no Zod 3 form at
+  all are listed in `v3/references/zod-3.md`. The text guards against wrong Zod 4 statements scan
+  the Zod 4 files only; the date and release-section guards scan everything. `agents.ts` checks
+  both baselines against both pins, that every Zod 3 rule file has a Zod 4 counterpart, and that
+  each Zod 3 reference names Zod 3.25.76 on line 3. The weekly CI job moves `zod3` to the latest
+  3.x beside `zod@latest`, so a patch on either line that changes a claim fails visibly.
+
+### Changed
+
+- The preamble no longer tells agents to avoid Zod 3 forms outright. It tells them to establish
+  the version first and to write neither API into a file of the other version.
+- README: the problem statement names both failure directions; Baseline lists both ranges.
+
 ## [2.0.0] — 2026-11-03
 
 A major version: `references/advanced-features.md` is removed, so a link to it breaks. The
