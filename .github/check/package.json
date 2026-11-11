@@ -28,6 +28,7 @@
     "typescript": "5.9.3",
     "vitest": "5.1.0",
     "zod": "4.6.7",
-    "zod-schema-faker": "3.0.1"
+    "zod-schema-faker": "3.0.1",
+    "zod3": "npm:zod@3.25.76"
   }
 }

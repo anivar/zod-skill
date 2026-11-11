@@ -3,11 +3,29 @@
 # Zod: compiled rules
 
 Every rule in `rules/`, expanded, for agents that read one file. Source: `SKILL.md` and `rules/*.md`.
-Baseline: zod ^4.6.0, checked against zod 4.6.7. Skill version 2.0.0.
+Baseline: zod ^4.6.0, checked against zod 4.6.7. Skill version 2.1.0.
+Zod 3 projects: zod ^3.25.0, checked against zod 3.25.76; the Zod 3 forms are in `v3/AGENTS.md`.
 
 ## Abstract
 
 Zod is for **runtime type validation** — parsing untrusted data at system boundaries (API input, form data, env vars, external services). For compile-time-only types, plain TypeScript is sufficient.
+
+## Which Zod
+
+Decide per file, before writing a schema. The import specifier wins; the installed version decides what the bare `zod` specifier means.
+
+| Evidence in the file and the project | API to write |
+|---|---|
+| `from "zod/v4"`, `"zod/v4-mini"` or `"zod/mini"` | Zod 4 |
+| `from "zod/v3"` | Zod 3 |
+| `from "zod"`, and the lockfile resolves `zod` to 4.x | Zod 4 |
+| `from "zod"`, and the lockfile resolves `zod` to 3.x | Zod 3 |
+| No lockfile: the `zod` range in `package.json` (`^3.25.0` is Zod 3, `^4.0.0` is Zod 4) | By range |
+| Nothing resolvable | Say so, default to Zod 4 (npm `latest`), and name the assumption in the change |
+
+Both package lines carry both APIs. `zod@3.25.x` exports Zod 4 at `zod/v4` and `zod/v4-mini`; `zod@4.x` exports Zod 3 at `zod/v3`; zod.dev/v4/versioning says the subpaths stay available. A library that accepts either declares `"zod": "^3.25.0 || ^4.0.0"` (zod.dev/v4/versioning) and follows zod.dev/library-authors.
+
+A Zod 4 file takes `rules/` and `references/` as written. For a Zod 3 file, read `v3/rules/<rule-id>.md` when it exists and apply that form; a rule with no Zod 3 file applies as written, and the check compiles those rules against Zod 3 to keep that true. Two rules have no Zod 3 form at all, `perf-compile` and `perf-zod-mini`; `v3/references/zod-3.md` lists them, with the API map by rule, the Zod 3 error model, and what parses differently between the versions. The `migrate-` rules describe the Zod 4 side of a migration: in a Zod 3 file their "Incorrect" forms are the correct forms until the file moves to `zod/v4`.
 
 ## Table of Contents
 
