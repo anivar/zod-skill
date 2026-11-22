@@ -2,6 +2,18 @@
 
 Docs: zod.dev/api · Zod 4.6.7
 
+## Contents
+
+- Object Variants
+- Object Methods
+- Recursive Objects
+- Arrays
+- Tuples
+- Records
+- Maps and Sets
+- Unions
+- Intersection
+
 ## Object Variants
 
 ### z.object() — Strips Unknown Keys

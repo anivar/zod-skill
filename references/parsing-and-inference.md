@@ -2,6 +2,14 @@
 
 Docs: zod.dev/basics, zod.dev/api · Zod 4.6.7
 
+## Contents
+
+- Parsing Methods
+- Type Inference
+- Coercion Namespace
+- Parse Options
+- Standard Schema
+
 ## Parsing Methods
 
 ### parse(data)

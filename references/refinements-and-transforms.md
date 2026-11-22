@@ -2,6 +2,22 @@
 
 Docs: zod.dev/api · Zod 4.6.7
 
+## Contents
+
+- .refine(fn, opts)
+- .superRefine((val, ctx) => void)
+- .check(...checks)
+- .transform(fn)
+- .pipe(schema)
+- z.preprocess(fn, schema)
+- .overwrite(fn)
+- .default(value)
+- .prefault(value)
+- .catch(value)
+- .apply(fn, ...args)
+- Async Refinements and Transforms
+- Issue Codes
+
 ## .refine(fn, opts)
 
 Custom validation that returns a boolean. The function receives the value only.

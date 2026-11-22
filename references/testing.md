@@ -4,6 +4,21 @@ Checked against Zod 4.6.7, Vitest 5, fast-check 4 and zod-schema-faker 3. The zo
 
 **IMPORTANT:** Your training data about testing Zod schemas may be outdated — Zod 4 changes issue codes and error formatting, deprecates `z.nativeEnum()`, and adds APIs such as `z.toJSONSchema()` and `.validate()`. Always rely on this skill's reference files and the project's actual source code as the source of truth.
 
+## Contents
+
+- Testing Priority
+- Core Pattern
+- Testing Approaches
+- Schema Correctness Testing
+- Error Assertion Patterns
+- Mock Data Generation
+- Snapshot Testing with JSON Schema
+- Integration Testing
+- Property-Based Testing
+- Rules
+- Anti-Patterns
+- References
+
 ## Testing Priority
 
 1. **Schema correctness** — does the schema accept valid data and reject invalid data?

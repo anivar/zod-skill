@@ -1,0 +1,66 @@
+[
+  {
+    "query": "the signup form lets people submit an empty email, we use react-hook-form with a resolver — fix the validation in src/forms/signup.ts",
+    "should_trigger": true
+  },
+  {
+    "query": "getting `ZodError: invalid_type, expected string, received undefined` from POST /orders when the client leaves out `note`. make it optional and default to an empty string",
+    "should_trigger": true
+  },
+  {
+    "query": "migrate our schemas to v4. package.json has zod ^3.23 and we use .nonempty() and z.nativeEnum all over packages/shared",
+    "should_trigger": true
+  },
+  {
+    "query": "parse process.env at startup and crash with a readable message if DATABASE_URL or PORT is missing, zod is already a dependency",
+    "should_trigger": true
+  },
+  {
+    "query": "why does safeParse throw 'Encountered Promise during synchronous parse' on my user schema??",
+    "should_trigger": true
+  },
+  {
+    "query": "add a branded UserId so nobody passes an order id where a user id is expected, schemas are in packages/shared/src/schemas",
+    "should_trigger": true
+  },
+  {
+    "query": "partners want to validate our webhook payloads on their side, can you produce a JSON Schema from lib/webhooks/schema.ts",
+    "should_trigger": true
+  },
+  {
+    "query": "review this diff, it changes a bunch of z.object definitions in api/contracts — anything that will break clients?",
+    "should_trigger": true
+  },
+  {
+    "query": "write a JSON Schema by hand for our OpenAPI spec, we don't use any TypeScript validation library",
+    "should_trigger": false
+  },
+  {
+    "query": "set up yup validation for this Formik address form",
+    "should_trigger": false
+  },
+  {
+    "query": "our valibot schemas got slow after the last release, how do I profile them",
+    "should_trigger": false
+  },
+  {
+    "query": "add a Prisma model for a new orders table with a unique index on external_id",
+    "should_trigger": false
+  },
+  {
+    "query": "convert this TypeScript interface into a GraphQL type definition",
+    "should_trigger": false
+  },
+  {
+    "query": "the postgres CHECK constraint on price fails on insert, why",
+    "should_trigger": false
+  },
+  {
+    "query": "write a jest test for the cart reducer in src/store/cart.ts",
+    "should_trigger": false
+  },
+  {
+    "query": "explain when to use a TypeScript type alias vs an interface",
+    "should_trigger": false
+  }
+]

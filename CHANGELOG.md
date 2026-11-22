@@ -4,6 +4,16 @@ Notable changes to this skill. The version that matters most in each entry is
 the *upstream* one: a skill about a moving library is only as good as the
 release it was last checked against.
 
+## [2.1.1] — 2026-11-22
+
+Frontmatter and navigation only; no rule changes. Checked against zod 4.6.7 and, for the Zod 3 files, zod 3.25.76, as in 2.1.0.
+
+### Changed
+
+- The description says when to load the skill: any file that imports zod, and form, env-var or API validation in a project that has zod installed, even when the user does not name Zod. It names the errors that point at Zod (`ZodError`, `invalid_type`, "Encountered Promise during synchronous parse").
+- The frontmatter carries only the fields of the Agent Skills specification. `user-invocable: false` and `agentic: false` are removed: `agentic` is not a field of the specification, and claude.ai and the Skills API refuse a skill whose frontmatter has a key outside the specification. In Claude Code, `/zod` now loads the skill by hand.
+- Each reference file over 100 lines opens with a contents list, so a partial read still shows what the file covers.
+
 ## [2.1.0] — 2026-11-11
 
 Zod 3 projects. Checked against zod 4.6.7 and, for the Zod 3 files, zod 3.25.76, the last

@@ -2,6 +2,25 @@
 
 Docs: zod.dev/api · Zod 4.6.7
 
+## Contents
+
+- Primitives
+- Strings
+- Numbers
+- BigInt
+- Boolean
+- Date
+- Enums
+- Stringbool
+- Literals
+- Files
+- JSON
+- Custom Types
+- Functions
+- Branded Types
+- Optional, Nullable, Nullish
+- Coercion
+
 ## Primitives
 
 ```typescript

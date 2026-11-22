@@ -5,7 +5,7 @@
 The Zod 3 form of every rule in `v3/rules/`, expanded, for agents that read one file. A rule with no file here
 applies as written in `AGENTS.md`; the check compiles those rules against Zod 3 to keep that true. The rules
 with no Zod 3 form at all are listed in `v3/references/zod-3.md`. Source: `SKILL.md` and `v3/rules/*.md`.
-Baseline: zod ^3.25.0, checked against zod 3.25.76. Skill version 2.1.0.
+Baseline: zod ^3.25.0, checked against zod 3.25.76. Skill version 2.1.1.
 
 ## Abstract
 

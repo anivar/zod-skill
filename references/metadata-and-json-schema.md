@@ -2,6 +2,14 @@
 
 Docs: zod.dev/metadata, zod.dev/json-schema, zod.dev/blog/zod-4-6 · Zod 4.6.7
 
+## Contents
+
+- Registries
+- Global Metadata: `.meta()` and `.describe()`
+- `z.toJSONSchema()`
+- `z.fromJSONSchema()`
+- Zod Mini
+
 ## Registries
 
 A registry maps schemas to typed metadata.

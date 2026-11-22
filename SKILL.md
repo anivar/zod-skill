@@ -1,25 +1,21 @@
 ---
 name: zod
 description: >
-  Zod best practices, patterns, and API guidance for schema validation,
-  parsing, error handling, and type inference in TypeScript applications,
-  for Zod 4 and for projects still on Zod 3. Tells the two apart from the
-  import specifier and the installed version, then applies the rule for that
-  version. Covers safeParse, object composition, refinements, transforms,
-  codecs, branded types, v3→v4 migration, and testing schemas with Jest or
-  Vitest. Baseline: zod ^4.6.0; Zod 3 projects: zod ^3.25.0.
-  Triggers on: zod imports, z.object, z.string, z.infer, safeParse,
-  mentions of "zod", "schema validation", "zod v4", "zod v3", "zod 3",
-  "zod/v3", "zod/v4", "z.enum", or testing a schema — "schema test",
-  "zod mock", zod-schema-faker.
+  Zod 4 and Zod 3 rules for schema validation in TypeScript: parsing untrusted input with safeParse,
+  object composition, refinements, transforms, codecs, branded types, error messages, JSON Schema,
+  v3 to v4 migration and schema tests. Baseline: zod ^4.6.0. Zod 3 projects: zod ^3.25.0. Use this
+  skill whenever code imports zod or the user writes, reviews, debugs or upgrades a schema, even if
+  they never say "zod": form, env-var and API input validation in a project that has zod installed
+  count. Training data often has the Zod 4 API wrong, so load this before writing a schema. Triggers
+  on: zod imports, z.object, z.infer, z.enum, safeParse, ZodError, invalid_type, "Encountered
+  Promise during synchronous parse", "schema validation", "zod v4", "zod/v3", "zod/mini",
+  zod-schema-faker.
 license: MIT
-user-invocable: false
-agentic: false
 compatibility: "TypeScript ^5.5 projects using zod ^4.6.0 (checked against zod 4.6.7) or zod ^3.25.0 (checked against zod 3.25.76)"
 metadata:
   author: Anivar Aravind
   author_url: https://anivar.net
-  version: 2.1.0
+  version: 2.1.1
   tags: zod, validation, schema, typescript, parsing, type-inference, forms, api, testing, jest, vitest, zod3
 ---
 

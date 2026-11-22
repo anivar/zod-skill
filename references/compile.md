@@ -4,6 +4,16 @@ Docs: zod.dev/compile, zod.dev/blog/zod-4-5, zod.dev/blog/zod-4-6 · Zod 4.6.7
 
 `z.compile()` turns a schema into flat JavaScript that checks valid input fast. The compiled schema returns the same data, the same issues and the same messages as the original. It has the same methods and inferred types. Added in Zod 4.5.
 
+## Contents
+
+- `z.compile(schema)`
+- `import "zod/compile"`
+- What Does Not Compile
+- Invalid Input Costs the Same
+- Content Security Policy
+- Bundle Size
+- Speed
+
 ## `z.compile(schema)`
 
 `z.compile()` returns a compiled copy and does not change the original.

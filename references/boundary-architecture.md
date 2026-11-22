@@ -2,6 +2,18 @@
 
 Checked against Zod 4.6.7, Express 5, tRPC 11, React Hook Form 7 with @hookform/resolvers 7, and @t3-oss/env-nextjs 0.13.
 
+## Contents
+
+- Overview
+- Express / Fastify — Route Handler vs Middleware
+- tRPC — `.input()` Parsing
+- Next.js Server Actions
+- React Hook Form — zodResolver
+- Environment Variables — Startup Parsing
+- External API Responses
+- Database Layer
+- Summary: Boundary Layer Checklist
+
 ## Overview
 
 Zod belongs at **system boundaries** — the points where your application receives data it doesn't control. Parse once at the boundary, then pass typed data inward. Domain logic should never see `unknown`.

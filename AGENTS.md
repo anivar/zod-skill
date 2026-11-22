@@ -3,7 +3,7 @@
 # Zod: compiled rules
 
 Every rule in `rules/`, expanded, for agents that read one file. Source: `SKILL.md` and `rules/*.md`.
-Baseline: zod ^4.6.0, checked against zod 4.6.7. Skill version 2.1.0.
+Baseline: zod ^4.6.0, checked against zod 4.6.7. Skill version 2.1.1.
 Zod 3 projects: zod ^3.25.0, checked against zod 3.25.76; the Zod 3 forms are in `v3/AGENTS.md`.
 
 ## Abstract

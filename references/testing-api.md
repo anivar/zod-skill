@@ -2,6 +2,21 @@
 
 Checked against Zod 4.6.7, Vitest 5.1, fast-check 4 and zod-schema-faker 3.
 
+## Contents
+
+- Schema Correctness Testing
+- Error Assertion Patterns
+- Mock Data Generation
+- Snapshot Testing
+- Integration Testing
+- Property-Based Testing
+- Async Schema Testing
+- Test Helpers
+- Structural Testing
+- Drift Detection
+- Observable Error Testing
+- Performance Testing
+
 ## Schema Correctness Testing
 
 ### safeParse() for Tests

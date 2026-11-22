@@ -4,6 +4,17 @@ Docs: zod.dev/v4/changelog, zod.dev/v4/versioning, the Zod 3 README and ERROR_HA
 
 Read this in a file that uses the Zod 3 API (see "Which Zod" in `SKILL.md`). Every behaviour statement here names the test that ran it on zod 3.25.76 beside zod 4.6.7 (`.github/check/claims.test.ts`, ids V1 and so on); type-level statements are the `@ts-expect-error` lines in the Zod 3 rule files, compiled against the same release. 3.25.76 is the last Zod 3 release and the only one checked; `.pipe()`, `.cidr()` and Standard Schema arrived during the 3.x line, so the baseline is `^3.25.0`, not any 3.x.
 
+## Contents
+
+- Which version a file uses
+- The API map, by rule
+- No Zod 3 form
+- What Zod 3 does not have
+- Error customization in Zod 3
+- The Zod 3 error object
+- What parses differently
+- Moving a file from Zod 3 to Zod 4
+
 ## Which version a file uses
 
 | Package | Root `zod` | `zod/v3` | `zod/v4` | Mini |

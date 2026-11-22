@@ -2,6 +2,17 @@
 
 Docs: zod.dev/error-customization, zod.dev/error-formatting · Zod 4.6.7
 
+## Contents
+
+- ZodError
+- Issue Structure
+- Issue Codes
+- Error Formatting Functions
+- Error Customization
+- Error Precedence
+- reportInput Option
+- i18n / Localization
+
 ## ZodError
 
 ```typescript

@@ -4,6 +4,17 @@ Docs: zod.dev/codecs, zod.dev/blog/zod-4-5 · Zod 4.6.7
 
 A codec is a schema with a transform in each direction. Decoding converts the input type to the output type: `.decode()` does at runtime what `.parse()` does. Encoding converts the output type back to the input type. Use a codec where a value crosses a boundary in both directions: an API request and response, a database row, a form value, a query string.
 
+## Contents
+
+- Define a Codec
+- Typed Input
+- Methods and Functions
+- What Runs in Each Direction
+- Invert a Codec
+- Validate One Side: `z.input()` and `z.output()`
+- Codecs vs Transforms
+- Recipes
+
 ## Define a Codec
 
 ```typescript
